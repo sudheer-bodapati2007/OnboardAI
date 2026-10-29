@@ -166,12 +166,25 @@ server/src/
 
 ## Storage Adapters
 
-| Provider | Config | Production ready |
-|---|---|---|
-| `LocalStorageAdapter` | `STORAGE_PROVIDER=local` | ❌ (files lost on Render restarts) |
-| `GCSStorageAdapter` | `STORAGE_PROVIDER=gcs` + `GCS_BUCKET` | ✅ (stub — install `@google-cloud/storage`) |
+Both adapters expose the same interface: `save(key, buffer)`, `getBuffer(key)`, `delete(key)`.
 
-Both expose the same interface: `put(key, buffer)`, `get(key)`, `delete(key)`.
+| Provider | Config | Production ready | Notes |
+|---|---|---|---|
+| `LocalStorageAdapter` | `STORAGE_PROVIDER=local` | ❌ Ephemeral on Render free tier | Path-traversal guarded via `_safeResolve()` |
+| `GCSStorageAdapter` | `STORAGE_PROVIDER=gcs` + `GCS_BUCKET` | ✅ | Real implementation using `@google-cloud/storage`; lazy-loaded; objects stored `private` |
+
+### GCS setup
+```
+npm install @google-cloud/storage        # in server/
+export STORAGE_PROVIDER=gcs
+export GCS_BUCKET=my-bucket
+export GOOGLE_APPLICATION_CREDENTIALS=/path/to/sa.json   # or use Workload Identity
+```
+
+Service account needs: `roles/storage.objectAdmin` on the bucket (not project-wide).  
+Bucket must be **private** (uniform bucket-level access, no public principals).
+
+> **Live GCS integration status:** Adapter logic is verified with mocks (35/35 audit tests pass). Live end-to-end with real GCS credentials has not been executed — no credentials available in the test environment. Verify manually before production deployment.
 
 ---
 

@@ -42,17 +42,19 @@ export async function createNotification({
 
 /**
  * List notifications for the authenticated user, newest first.
+ * Scoped to both userId AND organizationId (defence-in-depth).
  */
-export async function listNotifications(userId, { page = 1, limit = 30 } = {}) {
+export async function listNotifications(userId, organizationId, { page = 1, limit = 30 } = {}) {
   const skip = (page - 1) * limit;
+  const filter = { userId, organizationId };
   const [notifications, total, unreadCount] = await Promise.all([
-    Notification.find({ userId })
+    Notification.find(filter)
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean(),
-    Notification.countDocuments({ userId }),
-    Notification.countDocuments({ userId, isRead: false }),
+    Notification.countDocuments(filter),
+    Notification.countDocuments({ ...filter, isRead: false }),
   ]);
   return { notifications, total, unreadCount, page, limit };
 }

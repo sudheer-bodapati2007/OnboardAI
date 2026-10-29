@@ -27,8 +27,21 @@ const app = express();
 // ─── Security headers ─────────────────────────────────────────────────────────
 app.use(
   helmet({
+    // Required: Google Identity Services CDN must be allowed to embed the button
     crossOriginEmbedderPolicy: false,
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],          // frontend manages its own CSP via Vite
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'https://lh3.googleusercontent.com'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],     // prevents clickjacking
+        upgradeInsecureRequests: [],
+      },
+    },
   })
 );
 

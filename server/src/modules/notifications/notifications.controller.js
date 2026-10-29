@@ -6,7 +6,7 @@ export async function listNotifications(req, res, next) {
   try {
     const page = parseInt(req.query.page ?? '1', 10);
     const limit = Math.min(parseInt(req.query.limit ?? '30', 10), 100);
-    const result = await NotificationsService.listNotifications(req.user._id, { page, limit });
+    const result = await NotificationsService.listNotifications(req.user._id, req.user.organizationId, { page, limit });
     return res.json({
       success: true,
       data: { notifications: result.notifications, unreadCount: result.unreadCount },

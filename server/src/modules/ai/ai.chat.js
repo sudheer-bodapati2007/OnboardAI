@@ -77,13 +77,17 @@ export async function answerQuestion(organizationId, question) {
     const result = await model.generateContent(userPrompt);
     answer = result.response.text();
   } catch (err) {
-    if (err.message?.includes('quota') || err.message?.includes('rate')) {
+    // Log full error server-side; expose only a safe generic message to the client.
+    const msg = err.message ?? '';
+    console.error('[AI Chat] Gemini error:', msg);
+    if (msg.includes('quota') || msg.includes('rate') || msg.includes('429')) {
       throw new AppError('AI service is temporarily rate-limited. Please try again shortly.', 429);
     }
-    if (err.message?.includes('timeout')) {
+    if (msg.includes('timeout') || msg.includes('ETIMEDOUT')) {
       throw new AppError('AI service timed out. Please try again.', 504);
     }
-    throw new AppError(`AI service error: ${err.message}`, 502);
+    // Generic: do not expose raw Gemini error internals
+    throw new AppError('The AI service is temporarily unavailable. Please try again.', 502);
   }
 
   // 5. Build source citations

@@ -2,129 +2,178 @@
 
 ## Authentication
 
-- **Provider:** Google Identity Services (GIS) — server-side ID token verification
-- **Session:** HttpOnly, Secure (production), SameSite=Lax JWT cookie (1-day expiry)
-- **No passwords stored** — authentication is fully delegated to Google
-- **Token verification:** Server calls Google's tokeninfo endpoint; tokens are never trusted without verification
-- **Audience check:** JWT payload `organizationId` is resolved at login from the verified Google email domain — it cannot be injected by the client
+- **Provider:** Google Identity Services (GIS) — server-side ID token verification via `google-auth-library`
+- **Audience check:** `verifyIdToken({ audience: env.googleClientId })` — tokens issued for a different client ID are rejected
+- **Session:** HttpOnly, Secure (production), SameSite=Strict (production) / Lax (development) JWT cookie
+- **JWT expiry:** 8 hours (not days) — users re-authenticate daily
+- **No passwords stored** — authentication fully delegated to Google
+- **Organization resolution:** derived server-side from the verified Google email domain — cannot be injected via any client-controlled parameter
+
+## Cookie Security
+
+| Setting | Development | Production |
+|---|---|---|
+| `httpOnly` | `true` | `true` |
+| `secure` | `false` | `true` (HTTPS only) |
+| `sameSite` | `lax` | `strict` |
+| `maxAge` | 8 h | 8 h |
+| `path` | `/` | `/` |
+
+`SameSite=Strict` in production provides CSRF protection for cookie-authenticated state-changing requests. Cross-origin form submissions or fetch calls cannot carry the cookie.
 
 ## Authorization
 
 ```
-authenticate          → Verifies JWT cookie → populates req.user, req.org
+authenticate          → Verifies JWT cookie → populates req.user (with organizationId)
 requireHrAdmin        → Rejects non-hr_admin with 403
 requireRole('x')      → Generic role check
 ```
 
-All private routes require `authenticate`. HR-only mutations additionally require `requireHrAdmin`.
-
-Organization scope is always derived from `req.user.organizationId` — never from `req.body`, `req.query`, or `req.params`.
+- All private routes require `authenticate`
+- HR-only mutations additionally require `requireHrAdmin`
+- Organization scope is always `req.user.organizationId` from the verified JWT — never from request body, query, or params
+- Employees can only update their own tasks (checked against Employee record linked to `userId`)
 
 ## Organization Isolation
 
 Every database query on tenant data includes `{ organizationId: req.user.organizationId }`. Cross-organization access is structurally impossible:
 
-- Employees: `Employee.find({ organizationId, _id })` — HR in org A cannot see org B employees
-- Templates: scoped to `organizationId`
-- Tasks: scoped to `organizationId`; employees additionally checked against their own `employeeId`
-- PolicyDocuments: `{ organizationId }` on all queries; `storageKey` never exposed to client
-- PolicyChunks: `{ organizationId }` on retrieval — AI cannot access another org's policy text
-- Notifications: `{ userId, organizationId }` — mark-read requires both fields to match
+| Resource | Scope fields |
+|---|---|
+| Employees | `organizationId` |
+| OnboardingTemplates | `organizationId` |
+| OnboardingTasks | `organizationId` + employee ownership for PATCH |
+| PolicyDocuments | `organizationId` — `storageKey` never exposed to client |
+| PolicyChunks | `organizationId` — AI retrieval double-scoped: only `ready` docs from own org |
+| Notifications | `{ userId, organizationId }` — both required on list and mark-read |
+
+**Audit note (fixed in audit pass):** `listNotifications` was previously scoped only to `userId`. It now also filters by `organizationId` for defence-in-depth.
 
 ## File Upload Security
 
-- **MIME type checked** by multer filter — rejects non-`application/pdf` at the Express layer
-- **Magic bytes validation** — first 4 bytes must be `%PDF` (0x25 0x50 0x44 0x46)
+- **MIME type checked** by multer filter — rejects non-`application/pdf` immediately
+- **Magic bytes validation** — first 4 bytes must be `%PDF` (0x25 0x50 0x44 0x46), validated after multer so the buffer is available
 - **Size limit** — `MAX_UPLOAD_MB` (default 20 MB) enforced by multer before memory allocation
-- **Storage key generation** — always a server-generated UUID path (`policies/<uuid>.pdf`); the original filename is stored only for display, never used as an identifier or path component
-- **memoryStorage** — files never touch the filesystem temporarily; the buffer goes directly to the storage adapter
-- **Rate limit** — 20 uploads per hour per IP to prevent abuse
+- **Storage key generation** — always `{organizationId}/{uuid}.pdf` — server-generated, never from client input
+  - `storageKey` is never returned in API responses (`-storageKey` in Mongoose `.select()`)
+- **Path traversal prevention** — `LocalStorageAdapter._safeResolve()` validates the resolved path stays within `baseDir` using `relative()` and `isAbsolute()` checks
+- **memoryStorage** — multer never writes temp files; the buffer goes directly to the storage adapter
+- **Rate limit** — 20 uploads per hour per IP
+
+## GCS Storage Security
+
+- Files uploaded with `predefinedAcl: 'private'` — objects are never publicly accessible even if the bucket has a mixed policy
+- The bucket itself must have **uniform bucket-level access** enabled with no public principals
+- Service account needs only `roles/storage.objectAdmin` on the target bucket (not project-level)
+- Credentials: use Workload Identity (GKE/Cloud Run) or `GOOGLE_APPLICATION_CREDENTIALS` pointing to a service account key file
+- Key files should be stored as platform secrets (Render Secret Files, GCP Secret Manager), never committed to git
+- `@google-cloud/storage` is lazy-loaded at first use — the server starts cleanly without it when using `local` provider
 
 ## AI Safety
 
 ### Prompt injection prevention
-- Policy document text is inserted into the prompt as quoted evidence, not as instructions
-- The system prompt explicitly states the assistant must answer ONLY from the provided evidence
-- The system prompt forbids the assistant from performing administrative actions or making employment decisions
-- Policy text is labelled as untrusted data in the prompt structure
+- Policy document text is inserted into the prompt inside `<evidence>...</evidence>` XML tags as quoted data, not as instructions
+- System prompt rule 6 explicitly forbids following instructions embedded in policy text
+- The LLM is instructed to answer ONLY from the evidence block
+- The assistant is forbidden from performing administrative actions or employment decisions
 
 ### Source citation integrity
-- Source document names are taken from `PolicyDocument.originalName` in the database — not from the LLM output
-- The LLM cannot fabricate source names; only chunk metadata is returned as citation
-- `insufficient: true` is set when the similarity threshold is not met — the LLM is not called without evidence
+- Source document names are taken from `PolicyDocument.originalName` in MongoDB — not from LLM output
+- The LLM cannot fabricate source names; chunk metadata (not LLM-generated text) populates citation objects
+- `insufficient: true` is set application-side when no chunks meet the 0.70 similarity threshold — the LLM response is still included in case it provides a general disclaimer, but the flag tells the client to display the warning banner
+
+### Error message sanitization (fixed in audit pass)
+- Previously: `throw new AppError('AI service error: ${err.message}', 502)` — could leak Gemini error internals (API key fragments in PERMISSION_DENIED errors, model names, quota details)
+- Fixed: all Gemini errors are caught, classified (rate limit / timeout / generic), and re-thrown with sanitized messages. The raw error is logged server-side only.
 
 ### API key protection
 - `GEMINI_API_KEY` lives server-side only — never in `VITE_*` environment variables
-- The key is accessed via `env.geminiApiKey` in `config/env.js` and never logged or returned in responses
-- When the key is absent, the endpoint returns `503` with a generic message — no key details exposed
+- 503 is returned with a generic "not configured" message when the key is absent — no key details exposed
 
 ### Rate limiting
-- AI chat: 50 requests per hour per IP
-- Upload: 20 per hour per IP
-- Global API: 200 per 15 minutes per IP
-- Auth: 20 per 15 minutes per IP
+| Endpoint | Window | Max |
+|---|---|---|
+| Global `/api/` | 15 min | 200 |
+| `/api/v1/auth/*` | 15 min | 20 |
+| `POST /api/v1/policies` | 1 hour | 20 |
+| `POST /api/v1/ai/chat` | 1 hour | 50 |
 
 ## Notification Isolation
 
-- `GET /notifications` filters by `{ userId: req.user._id, organizationId }`
-- `PATCH /notifications/:id/read` uses `findOne({ _id, userId, organizationId })` — returns 404 if the notification doesn't belong to the requesting user
+- `GET /notifications` filters by `{ userId, organizationId }` — both required (fixed in audit pass from userId-only)
+- `PATCH /notifications/:id/read` — `findOneAndUpdate({ _id, userId })` — returns 404 if not owned by requester
 - Notification content never includes another user's private data
 
-## Error Handling
+## HTTP Security Headers (helmet)
 
-- Centralised `errorHandler` middleware — all unhandled errors are caught
-- `AppError` operational errors return structured JSON without stack traces in production
-- `NODE_ENV=production` suppresses error stack traces in responses
-- Mongoose duplicate key errors → `409 Conflict` (not `500`)
-- Validation errors → `400` with field-level messages from Zod
-- Unknown routes → `404` (not a default Express 404 with HTML)
-- No secrets, connection strings, or internal paths are included in error responses
+```js
+helmet({
+  crossOriginEmbedderPolicy: false,   // required for Google Identity Services CDN
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc:  ["'self'"],
+      scriptSrc:   ["'self'"],
+      styleSrc:    ["'self'", "'unsafe-inline'"],
+      imgSrc:      ["'self'", "data:", "https://lh3.googleusercontent.com"],
+      connectSrc:  ["'self'"],
+      fontSrc:     ["'self'"],
+      objectSrc:   ["'none'"],
+      frameAncestors: ["'none'"],     // prevents clickjacking
+      upgradeInsecureRequests: [],
+    },
+  },
+})
+```
 
-## HTTP Security Headers
-
-`helmet` is applied globally:
-- `X-Content-Type-Options: nosniff`
-- `X-Frame-Options: SAMEORIGIN`
-- `X-XSS-Protection` (legacy browsers)
-- `Strict-Transport-Security` (HSTS) in production
-- `Referrer-Policy: strict-origin-when-cross-origin`
-- `crossOriginEmbedderPolicy: false` — required for Google Identity Services CDN
-- `contentSecurityPolicy: false` — CSP managed separately (to be tightened in production)
+**Audit note:** CSP was previously fully disabled (`contentSecurityPolicy: false`). It is now enabled with a restrictive policy. The frontend is a separate SPA that manages its own CSP independently.
 
 ## CORS
 
 ```js
 cors({
-  origin: env.clientUrl,   // exact match — no wildcards in production
-  credentials: true,        // required for cookie-based auth
+  origin: env.clientUrl,    // exact match — never a wildcard
+  credentials: true,         // required for cookie-based auth
   methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 })
 ```
 
-## Cookie Security
+## Error Handling
 
-```js
-cookie: {
-  httpOnly: true,     // inaccessible to document.cookie
-  secure: production, // HTTPS only in production
-  sameSite: 'lax',    // CSRF protection for cross-site navigation
-  maxAge: 86400000,   // 1 day
-}
-```
+- Centralised `errorHandler` middleware catches all errors
+- `AppError` operational errors return structured JSON without stack traces in production
+- Stack traces included only in `NODE_ENV=development` for non-operational errors
+- Mongoose duplicate key → `409 Conflict` (not `500`)
+- Mongoose validation → `422` with field details from Zod
+- Bad ObjectId → `400 INVALID_ID` (no internal Mongoose detail)
+- Unknown routes → `404` JSON (not Express default HTML)
+- No secrets, connection strings, or internal paths in error responses
 
-## Input Validation
+## Remaining Known Limitations
 
-- All request bodies validated with Zod schemas before reaching controllers
-- Query parameters coerced and bounded (page ≥ 1, limit ≤ 100)
-- AI question: max 1000 characters (Zod)
-- Template task arrays: validated for required fields
+| Item | Status | Notes |
+|---|---|---|
+| CSP `'unsafe-inline'` for styles | Accepted risk | Required for Tailwind's inline style output; can be tightened with nonces |
+| GCS live integration | **Not verified** | Logic tested with mocks; no live GCS credentials available in test environment |
+| No refresh tokens | Accepted | JWTs expire after 8 h; users re-authenticate. Good for MVP. |
+| Scanned PDFs | Not supported | pdf-parse reads embedded text only; image-only PDFs fail processing with a clear error |
+| Embedding dimension mismatch | Risk | Changing `GEMINI_EMBED_MODEL` after docs are embedded requires re-processing all chunks |
+| multer v1 deprecation | Low risk | v1 is still maintained; v2 has a different API. Safe to upgrade later. |
+| No API token auth | By design | Cookie-only auth; no bearer token support. Frontend and backend must share the same origin configuration. |
+| No account deletion | Missing | Users cannot delete their account or data; no GDPR erasure endpoint |
 
-## Known Limitations / Future Work
+## Manual Verification Checklist (Pre-Deployment)
 
-- **CSP headers** are disabled — enable and configure with nonces or hashes before production
-- **GCS service account credentials** — use Workload Identity or a mounted secret file; never commit key JSON
-- **multer v1 deprecation** — safe but should be upgraded to multer v2 when the API stabilises
-- **No refresh token / sliding session** — JWTs expire after 1 day; users must re-authenticate
-- **Embedding dimension mismatch** — if `GEMINI_EMBED_MODEL` is changed after documents are embedded, existing chunks will have wrong dimensions and similarity scores will be meaningless; re-process all documents after model changes
-- **PDF text extraction** — pdf-parse cannot extract text from scanned/image-only PDFs; OCR integration would be needed for those
+Before going live, manually verify:
+
+- [ ] Google OAuth: sign in with `ADMIN_SEED_EMAIL` account → role = `hr_admin`
+- [ ] Google OAuth: sign in with a different Google account → role = `employee`
+- [ ] HR: create an employee, assign onboarding template, verify notification appears
+- [ ] Employee: mark a task complete, verify it appears in HR dashboard
+- [ ] HR: upload a text-based policy PDF, wait for `ready` status
+- [ ] AI: ask a question covered by the PDF → answer cites document name
+- [ ] AI: ask an unrelated question → `insufficient` banner shown
+- [ ] Cross-org: confirm user A cannot access user B's notifications or policy documents
+- [ ] GCS: with `STORAGE_PROVIDER=gcs`, upload a PDF → verify it appears in the GCS bucket as a private object, not publicly accessible
+- [ ] Cookie: verify `Secure` and `HttpOnly` flags are set in browser DevTools → Application → Cookies
+- [ ] Rate limit: send > 50 AI chat requests in 1 hour → verify 429 response
