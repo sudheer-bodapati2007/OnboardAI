@@ -1,97 +1,227 @@
-# Architecture — OnboardAI Phase 1
+# Architecture — OnboardAI
 
 ## Overview
 
-OnboardAI is a **modular monolith** — a single deployable application with well-separated modules. There are no microservices, message queues, or external caches in Phase 1.
+OnboardAI is a **modular monolith** — a single Express API with feature-based modules, and a Vite/React SPA. No microservices, no message queues, no Redis in Phase 1–2.
 
 ```
-Browser (React SPA)
-    │  HTTPS + HttpOnly cookie
-    ▼
-Express.js API Server (Node.js)
-    │
-    ├── Auth Module        ← Google token verification, JWT sessions
-    ├── Employees Module   ← CRUD for HR admins
-    ├── Onboarding Module  ← Templates + Task generation + Progress
-    │
-    └── MongoDB Atlas      ← Persistent storage
+┌─────────────────────────────────┐
+│        React SPA (Vite)         │  ← client/
+│  Tailwind · React Router · Axios│
+└────────────┬────────────────────┘
+             │ HTTPS / JSON API
+             │ HttpOnly JWT cookie
+┌────────────▼────────────────────┐
+│       Express API (Node.js)     │  ← server/
+│  Helmet · CORS · Rate limiting  │
+│  Zod validation · JWT auth      │
+│                                 │
+│  ┌──────────┐  ┌─────────────┐  │
+│  │   Auth   │  │  Employees  │  │
+│  ├──────────┤  ├─────────────┤  │
+│  │Onboarding│  │  Templates  │  │
+│  ├──────────┤  ├─────────────┤  │
+│  │  Policy  │  │     AI      │  │
+│  ├──────────┤  ├─────────────┤  │
+│  │Notifs    │  │   Tasks     │  │
+│  └──────────┘  └─────────────┘  │
+└────────────┬────────────────────┘
+             │
+    ┌────────┴──────────┐
+    │    MongoDB Atlas   │
+    │  Mongoose ODM      │
+    └────────────────────┘
 ```
 
-## Modules
-
-### `server/src/modules/auth/`
-Handles Google ID token verification, session cookie issuance, and user retrieval.
-
-- **auth.service.js** — verifyGoogleToken (google-auth-library), findOrCreateUser, issueSessionCookie
-- **auth.controller.js** — googleLogin, getMe, logout
-- **auth.routes.js** — POST /auth/google, GET /auth/me, POST /auth/logout
-
-### `server/src/modules/employees/`
-Full employee CRUD with pagination, search, filtering, and status management.
-
-- **employees.validation.js** — Zod schemas for all employee endpoints
-- **employees.service.js** — DB operations with org-scoped queries
-- **employees.controller.js** — Request/response handlers
-- **employees.routes.js** — Protected routes (hr_admin only)
-
-### `server/src/modules/onboarding/`
-Reusable templates, task generation, and progress tracking.
-
-- **onboarding.validation.js** — Zod schemas
-- **onboarding.service.js** — Template CRUD, startOnboarding (task snapshot generation), overview aggregation
-- **onboarding.controller.js** — Request handlers
-- **onboarding.routes.js** — Template and employee-facing routes
-- **tasks.routes.js** — PATCH /tasks/:id/status (shared by HR and employees)
+---
 
 ## Authentication Flow
 
 ```
-1. Browser loads Google Identity Services (CDN)
-2. User clicks "Sign in with Google"
-3. Google returns a signed ID token (JWT) to the browser
-4. Browser POST /api/v1/auth/google { idToken }
-5. Server: google-auth-library.verifyIdToken(idToken, audience=GOOGLE_CLIENT_ID)
-6. Server: findOrCreateUser from Google payload (googleId, email, name, picture)
-7. Server: issues a signed application JWT in an HttpOnly cookie
-8. All subsequent requests carry the cookie automatically
-9. authenticate middleware verifies JWT, loads User from DB, attaches to req.user
-10. requireHrAdmin / requireRole enforces role on each route
+Browser                    Server                  Google
+  │                          │                       │
+  │── Sign in with Google ──►│                       │
+  │                          │── verify idToken ────►│
+  │                          │◄─ tokenInfo ──────────│
+  │                          │
+  │                          │  findOrCreate User
+  │                          │  findOrCreate Org
+  │                          │  assign role
+  │                          │
+  │◄── Set-Cookie: jwt ──────│   (HttpOnly, Secure, SameSite=Lax)
+  │
+  │── All API requests ──────►  (cookie sent automatically)
+  │                          │  JWT verified → req.user + req.org
 ```
 
-## Data Flow — Employee Onboarding
+1. The browser loads Google Identity Services from the CDN.
+2. After sign-in, GIS calls `google.accounts.id.initialize` callback with an `idToken`.
+3. The client POSTs the `idToken` to `POST /api/v1/auth/google`.
+4. The server verifies the token with Google's tokeninfo endpoint.
+5. A MongoDB `User` and `Organization` are created if they don't exist.
+6. A JWT (1 day expiry) is set as an HttpOnly cookie.
+7. All subsequent requests carry the cookie automatically.
+
+---
+
+## Module Map
 
 ```
-HR Admin selects template → POST /employees/:id/onboarding
-    ↓
-onboarding.service.startOnboarding()
-    ↓
-Snapshot each template task → create OnboardingTask docs
-(title, description, dueDate = startDate + dueDayOffset)
-    ↓
-Employee views GET /onboarding/me
-    ↓
-Employee updates PATCH /tasks/:id/status
-    ↓
-service enforces ownership (employee.userId === req.user._id)
-    ↓
-completedAt set server-side when status = 'completed'
-    ↓
-HR views GET /onboarding/overview
-    ↓
-MongoDB aggregation pipeline computes metrics
+server/src/
+├── config/
+│   ├── env.js           Typed env variable access + validation
+│   ├── database.js      Mongoose connect/disconnect
+│   └── storage.js       Storage adapter factory (local / GCS)
+│
+├── middleware/
+│   ├── auth.js          authenticate (JWT), requireHrAdmin, requireRole
+│   ├── validate.js      Zod schema → next(AppError) on failure
+│   └── errorHandler.js  Centralised error → JSON response
+│
+├── models/
+│   ├── User.js           googleId, email, name, picture, role, organizationId
+│   ├── Organization.js   domain, name
+│   ├── Employee.js       fullName, department, startDate, status, userId
+│   ├── OnboardingTemplate.js  name, role, tasks[]
+│   ├── OnboardingTask.js      snapshot of template task for one employee
+│   ├── Notification.js        userId, type, title, body, isRead
+│   ├── PolicyDocument.js      organizationId, storageKey, status, chunkCount…
+│   └── PolicyChunk.js         organizationId, documentId, text, embedding[]
+│
+└── modules/
+    ├── auth/            Google login, /me, logout
+    ├── employees/       CRUD + status + pagination
+    ├── onboarding/      Templates CRUD, task generation, task status, overview
+    ├── tasks/           Individual task status update (employee self-service)
+    ├── policy/          Upload, list, delete, async processing pipeline
+    ├── notifications/   Create, list (paginated), mark read, mark all read
+    └── ai/              Embed query → retrieve chunks → Gemini chat → answer
 ```
 
-## Organization Isolation
+---
 
-Every request to a protected route has `req.user.organizationId` available (loaded from the JWT-validated DB user). All DB queries include `organizationId` as a filter. The client never sends an organization ID — the server derives it from the session.
+## Phase 2: Policy RAG Pipeline
 
-## Security Boundaries
+```
+  HTTP POST /api/v1/policies (multipart/form-data)
+       │
+       ▼
+  multer (memoryStorage)
+  • MIME check (application/pdf only)
+  • Magic bytes check (%PDF header)
+  • Size check (≤ MAX_UPLOAD_MB)
+       │
+       ▼
+  policy.service.uploadPolicy()
+  • Generate UUID-based storageKey (never from client filename)
+  • storage.put(storageKey, buffer)   ← local or GCS adapter
+  • PolicyDocument.create({ status: 'pending' })
+  • Fire-and-forget processDocument()
+  • Return document to client immediately
+       │
+       ▼ (async)
+  policy.processor.processDocument()
+  • Load buffer from storage
+  • pdf-parse → text + page count
+  • Chunk text (800 chars, 150 char overlap)
+  • For each chunk: Gemini text-embedding-004 → [768 floats]
+  • PolicyChunk.insertMany()
+  • PolicyDocument.status = 'ready'
+  • createNotification(type: 'policy_ready')
+```
 
-- JWT in HttpOnly cookie (not localStorage)
-- Google token audience validation prevents cross-app token reuse
-- Zod validates all input at the route boundary
-- Mongoose unique indexes enforce data integrity
-- CORS restricted to `CLIENT_URL`
-- Helmet sets secure HTTP headers
-- Rate limiting on all API and auth endpoints
+### AI Chat RAG Flow
 
+```
+  POST /api/v1/ai/chat  { question, history[] }
+       │
+       ▼
+  Zod validation (question ≤ 1000 chars)
+       │
+       ▼
+  ai.retrieval.embedQuery(question)
+  → Gemini text-embedding-004 → [768 floats]
+       │
+       ▼
+  PolicyChunk.find({ organizationId, documentId: ready docs })
+  cosine_similarity(queryEmbed, chunkEmbed) for each chunk
+  filter ≥ 0.70 → sort desc → top 5
+       │
+       ▼
+  If no chunks: return { insufficient: true }
+       │
+       ▼
+  Build grounded system prompt:
+    "Answer ONLY from the evidence. Do not fabricate policies."
+    + chunk texts + page refs
+       │
+       ▼
+  Gemini generateContent (gemini-1.5-flash)
+       │
+       ▼
+  Return { answer, sources[{ documentName, pageNumber, excerpt }], insufficient }
+```
+
+---
+
+## Storage Adapters
+
+| Provider | Config | Production ready |
+|---|---|---|
+| `LocalStorageAdapter` | `STORAGE_PROVIDER=local` | ❌ (files lost on Render restarts) |
+| `GCSStorageAdapter` | `STORAGE_PROVIDER=gcs` + `GCS_BUCKET` | ✅ (stub — install `@google-cloud/storage`) |
+
+Both expose the same interface: `put(key, buffer)`, `get(key)`, `delete(key)`.
+
+---
+
+## Org Isolation
+
+Every database model that stores user data has an `organizationId` field. The authenticated user's `organizationId` is injected from the JWT payload — it is never trusted from the request body.
+
+| Model | Scope |
+|---|---|
+| Employee | `organizationId` filter on all queries |
+| OnboardingTemplate | `organizationId` |
+| OnboardingTask | `organizationId` + employee ownership check for employees |
+| PolicyDocument | `organizationId` |
+| PolicyChunk | `organizationId` — AI retrieval only searches own org |
+| Notification | `organizationId` + `userId` — mark-read requires both |
+
+---
+
+## Rate Limits
+
+| Endpoint | Window | Max |
+|---|---|---|
+| Global `/api/` | 15 min | 200 |
+| `/api/v1/auth/*` | 15 min | 20 |
+| `POST /api/v1/policies` | 1 hour | 20 |
+| `POST /api/v1/ai/chat` | 1 hour | 50 |
+
+---
+
+## Frontend Architecture
+
+```
+client/src/
+├── contexts/AuthContext.jsx    Global auth state (user, org, role, logout)
+├── layouts/AppLayout.jsx       Sidebar nav + notification bell + Outlet
+├── components/
+│   ├── ProtectedRoute.jsx      Role-gated React Router wrapper
+│   ├── NotificationDrawer.jsx  Bell + dropdown panel
+│   └── ui/                     Badge, EmptyState, ErrorMessage, Modal, …
+├── pages/
+│   ├── LoginPage.jsx           Google One Tap / Sign-in button
+│   ├── DashboardPage.jsx       HR stats + charts
+│   ├── EmployeesPage.jsx       Paginated employee list
+│   ├── EmployeeDetailPage.jsx  Profile + onboarding task list
+│   ├── EmployeeFormPage.jsx    Create / edit employee
+│   ├── TemplatesPage.jsx       Onboarding templates CRUD
+│   ├── MyOnboardingPage.jsx    Employee task checklist
+│   ├── PolicyPage.jsx          HR: upload / list / delete PDFs
+│   └── AIChatPage.jsx          AI assistant with source citations
+└── services/api.js             Axios instance + authApi, employeesApi,
+                                onboardingApi, tasksApi, notificationsApi,
+                                policiesApi, aiApi
+```

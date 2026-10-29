@@ -1,183 +1,295 @@
-# API Contracts — OnboardAI v1
+# API Contracts — OnboardAI
 
-Base URL: `http://localhost:5000/api/v1`
+All endpoints are prefixed with `/api/v1`.  
+All requests/responses use `Content-Type: application/json` unless noted.  
+Authentication is via HttpOnly JWT cookie set during login.
 
-All responses follow:
+## Response envelope
+
 ```json
+// Success
 { "success": true, "data": { ... } }
-{ "success": false, "error": { "code": "...", "message": "..." } }
+
+// Paginated
+{ "success": true, "data": { ... }, "meta": { "total": 0, "page": 1, "limit": 20, "pages": 1 } }
+
+// Error
+{ "success": false, "error": { "code": "ERROR_CODE", "message": "Human readable" } }
 ```
-
-Paginated responses include:
-```json
-{ "success": true, "data": { ... }, "meta": { "page": 1, "limit": 20, "total": 55, "totalPages": 3 } }
-```
-
----
-
-## Health
-
-### `GET /health`
-Public. Returns server status.
 
 ---
 
 ## Auth
 
-### `POST /auth/google`
-**Public.** Rate limited (20/15 min).
+### POST /auth/google
+Sign in with Google ID token.
 
-Body: `{ "idToken": "<Google ID token>" }`
+**Body:** `{ "idToken": "string" }`  
+**Response:** Sets `jwt` cookie. Returns user + org.
 
-Response 200:
-```json
-{ "data": { "user": { "id", "email", "name", "picture", "role", "organizationId" } } }
-```
-Sets an HttpOnly session cookie.
-
-Errors: 400 (missing idToken), 401 (invalid token), 403 (inactive account).
-
----
-
-### `GET /auth/me`
-**Authenticated.**
-
-Response 200: Same user object as above.
-
-Errors: 401 (no/expired session).
-
----
-
-### `POST /auth/logout`
-**Authenticated.**
-
-Clears the session cookie.
-
-Response 200: `{ "data": { "message": "Logged out successfully" } }`
-
----
-
-## Employees
-
-All employee routes require `hr_admin` role.
-
-### `POST /employees`
-Create employee.
-
-Body:
 ```json
 {
-  "fullName": "Jane Smith",
-  "email": "jane@company.com",
-  "jobTitle": "Software Engineer",
-  "department": "Engineering",
-  "manager": "Bob Jones",
-  "startDate": "2024-02-01",
-  "status": "onboarding"
+  "data": {
+    "user": { "_id": "...", "name": "...", "email": "...", "role": "hr_admin" },
+    "organization": { "_id": "...", "name": "example.com" }
+  }
 }
 ```
-Response 201: `{ "data": { "employee": { ... } } }`
 
-Errors: 409 (duplicate email in org), 422 (validation).
+### GET /auth/me
+Returns the currently authenticated user (cookie required).
 
----
-
-### `GET /employees`
-List with pagination, search, filter.
-
-Query params: `page`, `limit`, `search`, `department`, `status`
-
-Response 200: Paginated list.
+### POST /auth/logout
+Clears the `jwt` cookie.
 
 ---
 
-### `GET /employees/:id`
-Get one employee. 404 if not in org.
+## Employees (HR admin only)
 
----
+### GET /employees
+List employees with pagination and search.
 
-### `PATCH /employees/:id`
-Partial update. Same body fields as POST (all optional).
+**Query params:** `page`, `limit`, `search`, `status`, `department`
 
----
+### POST /employees
+Create a new employee.
 
-### `PATCH /employees/:id/status`
-Body: `{ "status": "active" | "inactive" | "onboarding" }`
-
----
-
-## Onboarding
-
-### `GET /onboarding/templates`
-**hr_admin.** List templates for the organization.
-
-### `POST /onboarding/templates`
-**hr_admin.** Create template.
 ```json
 {
-  "name": "Software Engineer Onboarding",
-  "description": "...",
-  "roleTarget": "Software Engineer",
+  "fullName": "Alice Smith",
+  "email": "alice@example.com",
+  "department": "Engineering",
+  "position": "Software Engineer",
+  "startDate": "2025-01-15"
+}
+```
+
+### GET /employees/:id
+Get employee by ID.
+
+### PATCH /employees/:id
+Update employee fields.
+
+### PATCH /employees/:id/status
+Update employee status.
+
+**Body:** `{ "status": "active" | "inactive" | "onboarding" }`
+
+### POST /employees/:employeeId/onboarding
+Start onboarding for an employee from a template.
+
+**Body:** `{ "templateId": "..." }`
+
+### GET /employees/:id/tasks
+Get all onboarding tasks for an employee (HR view).
+
+---
+
+## Onboarding Templates (HR admin)
+
+### GET /onboarding/templates
+List all active templates for the org.
+
+### POST /onboarding/templates
+Create a template.
+
+```json
+{
+  "name": "Engineering Onboarding",
+  "role": "Software Engineer",
   "tasks": [
-    { "title": "Set up dev environment", "category": "IT Setup", "dueDayOffset": 1, "order": 0 }
+    { "title": "Set up laptop", "description": "...", "category": "IT", "dueDayOffset": 1, "order": 1 }
   ]
 }
 ```
 
-### `PATCH /onboarding/templates/:id`
-**hr_admin.** Update template (partial).
+### PATCH /onboarding/templates/:id
+Update a template (name, role, tasks).
 
-### `GET /onboarding/me`
-**Any authenticated user.** Returns the calling user's employee record and their tasks.
+### GET /onboarding/overview
+HR dashboard statistics.
 
-### `GET /onboarding/overview`
-**hr_admin.** Dashboard aggregation.
-
-Response:
 ```json
 {
   "data": {
-    "employees": { "total", "active", "onboarding", "completedOnboarding" },
-    "tasks": { "total", "completed", "pending", "overdue", "avgCompletionPercent" },
-    "recentActivity": [ { "taskId", "title", "employeeName", "department", "completedAt" } ],
-    "departmentBreakdown": [ { "department", "count" } ]
+    "employees": { "total": 24, "active": 18, "onboarding": 4, "completedOnboarding": 2 },
+    "tasks": { "total": 120, "completed": 80, "pending": 30, "overdue": 10, "avgCompletionPercent": 67 },
+    "recentActivity": [...],
+    "departmentBreakdown": [{ "department": "Engineering", "count": 10 }]
   }
 }
 ```
 
 ---
 
-### `POST /employees/:employeeId/onboarding`
-**hr_admin.** Generate tasks from a template.
+## Tasks
 
-Body: `{ "templateId": "<id>" }`
+### GET /onboarding/me
+Get the authenticated employee's own tasks + employee record.
 
-Response 201: `{ "data": { "tasks": [...], "count": 6 } }`
+### PATCH /tasks/:id/status
+Update task status. Employees may only update their own tasks.
 
-Errors: 409 (onboarding already started), 422 (empty template).
-
----
-
-### `GET /employees/:id/tasks`
-**hr_admin.** Get all tasks for an employee.
+**Body:** `{ "status": "pending" | "in_progress" | "completed" }`
 
 ---
 
-### `PATCH /tasks/:id/status`
-**Authenticated.** Employees: own tasks only. HR: any org task.
+## Policy Documents (HR admin)
 
-Body: `{ "status": "pending" | "in_progress" | "completed" }`
+### POST /policies
+Upload a policy PDF. `Content-Type: multipart/form-data`.  
+Field name: `file`.  
+Max size: `MAX_UPLOAD_MB` (default 20 MB).
+
+**Response (202 Accepted):**
+```json
+{
+  "data": {
+    "document": {
+      "_id": "...",
+      "originalName": "employee-handbook.pdf",
+      "status": "pending",
+      "sizeBytes": 204800,
+      "createdAt": "2025-01-15T10:00:00Z"
+    }
+  }
+}
+```
+
+Processing is async — poll `GET /policies` to check `status`.
+
+**Rate limit:** 20 uploads per hour.
+
+### GET /policies
+List all policy documents for the org.
+
+```json
+{
+  "data": {
+    "documents": [
+      {
+        "_id": "...",
+        "originalName": "employee-handbook.pdf",
+        "status": "ready",
+        "sizeBytes": 204800,
+        "pageCount": 42,
+        "chunkCount": 87,
+        "createdAt": "..."
+      }
+    ]
+  }
+}
+```
+
+Statuses: `pending` → `processing` → `ready` | `failed`
+
+### DELETE /policies/:id
+Delete a policy document, its chunks, and its stored file.
 
 ---
 
-## Error Codes
+## AI Chat
 
-| Code | HTTP | Description |
-|---|---|---|
-| `VALIDATION_ERROR` | 422 | Zod validation failed |
-| `DUPLICATE` | 409 | Unique constraint (email in org) |
-| `NOT_FOUND` | 404 | Resource not found in org |
-| `INVALID_ID` | 400 | Bad ObjectId format |
-| `RATE_LIMIT` | 429 | Too many requests |
-| `INTERNAL_ERROR` | 500 | Unexpected server error |
+### POST /ai/chat
+Ask a question grounded in the org's policy documents.  
+Available to all authenticated users.
 
+**Body:**
+```json
+{
+  "question": "What is the remote work policy?",
+  "history": [
+    { "role": "user", "parts": [{ "text": "..." }] },
+    { "role": "model", "parts": [{ "text": "..." }] }
+  ]
+}
+```
+
+**Response (200):**
+```json
+{
+  "data": {
+    "answer": "According to the Remote Work Policy (p. 12)...",
+    "sources": [
+      {
+        "documentName": "employee-handbook.pdf",
+        "pageNumber": 12,
+        "excerpt": "Employees may work remotely up to 3 days per week..."
+      }
+    ],
+    "insufficient": false
+  }
+}
+```
+
+When no relevant chunks are found:
+```json
+{
+  "data": {
+    "answer": "I could not find sufficient information in the policy documents...",
+    "sources": [],
+    "insufficient": true
+  }
+}
+```
+
+**Error responses:**
+- `503` — `GEMINI_API_KEY` not configured
+- `429` — rate limit (50 per hour)
+- `400` — question missing or > 1000 chars
+- `502` — Gemini API unavailable
+
+---
+
+## Notifications
+
+### GET /notifications
+List notifications for the authenticated user.
+
+**Query params:** `page`, `limit` (default 30)
+
+```json
+{
+  "data": {
+    "notifications": [
+      {
+        "_id": "...",
+        "type": "onboarding_assigned",
+        "title": "Your onboarding plan is ready",
+        "body": "Your checklist 'Engineering Onboarding' has been assigned.",
+        "isRead": false,
+        "createdAt": "..."
+      }
+    ],
+    "unreadCount": 3
+  }
+}
+```
+
+**Notification types:**
+
+| Type | Trigger |
+|---|---|
+| `onboarding_assigned` | HR starts onboarding for an employee |
+| `task_completed` | Employee marks a task complete |
+| `policy_ready` | Policy PDF processed successfully |
+| `policy_failed` | Policy PDF processing failed |
+| `task_overdue` | (reserved for future scheduler) |
+| `onboarding_completed` | (reserved for future trigger) |
+
+### PATCH /notifications/:id/read
+Mark a single notification as read. User must own the notification.
+
+**Response:** `{ "data": { "notification": { ... } } }`
+
+### PATCH /notifications/read-all
+Mark all of the authenticated user's unread notifications as read.
+
+---
+
+## Health
+
+### GET /health
+```json
+{ "success": true, "data": { "status": "ok", "environment": "production", "timestamp": "..." } }
+```

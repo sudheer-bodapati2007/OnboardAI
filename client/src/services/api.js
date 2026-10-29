@@ -64,5 +64,25 @@ export const tasksApi = {
   updateStatus: (id, status) => api.patch(`/tasks/${id}/status`, { status }),
 };
 
+// ─── Notifications ────────────────────────────────────────────────────────────
+export const notificationsApi = {
+  list: (params) => api.get('/notifications', { params }),
+  markRead: (id) => api.patch(`/notifications/${id}/read`),
+  markAllRead: () => api.patch('/notifications/read-all'),
+};
+
+// ─── Policies ─────────────────────────────────────────────────────────────────
+export const policiesApi = {
+  list: () => api.get('/policies'),
+  upload: (formData) =>
+    api.post('/policies', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  delete: (id) => api.delete(`/policies/${id}`),
+};
+
+// ─── AI ───────────────────────────────────────────────────────────────────────
+export const aiApi = {
+  chat: (question, history = []) => api.post('/ai/chat', { question, history }),
+};
+
 export default api;
 

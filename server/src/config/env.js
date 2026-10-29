@@ -11,6 +11,9 @@ const REQUIRED = [
   'CLIENT_URL',
 ];
 
+// AI variables — optional at startup; checked when AI routes are called
+const AI_VARS = ['GEMINI_API_KEY'];
+
 export function validateEnv() {
   const missing = REQUIRED.filter((key) => !process.env[key]);
   if (missing.length > 0) {
@@ -30,5 +33,18 @@ export const env = {
   clientUrl: process.env.CLIENT_URL ?? 'http://localhost:5173',
   adminSeedEmail: process.env.ADMIN_SEED_EMAIL ?? null,
   isProd: process.env.NODE_ENV === 'production',
-};
 
+  // AI provider
+  geminiApiKey: process.env.GEMINI_API_KEY ?? null,
+  geminiChatModel: process.env.GEMINI_CHAT_MODEL ?? 'gemini-1.5-flash',
+  geminiEmbedModel: process.env.GEMINI_EMBED_MODEL ?? 'text-embedding-004',
+
+  // Storage
+  storageProvider: process.env.STORAGE_PROVIDER ?? 'local',
+  storageLocalDir: process.env.STORAGE_LOCAL_DIR ?? 'uploads',
+  // GCS (used when STORAGE_PROVIDER=gcs)
+  gcsBucket: process.env.GCS_BUCKET ?? null,
+
+  // Upload limits
+  maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB ?? '20', 10),
+};

@@ -9,19 +9,24 @@ import {
   Menu,
   X,
   Sparkles,
-  ChevronRight,
   CheckSquare,
+  FileText,
+  Bot,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { NotificationDrawer } from '../components/NotificationDrawer.jsx';
 
 const HR_NAV = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/employees', icon: Users, label: 'Employees' },
-  { to: '/templates', icon: ClipboardList, label: 'Templates' },
+  { to: '/dashboard',  icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/employees',  icon: Users,            label: 'Employees' },
+  { to: '/templates',  icon: ClipboardList,    label: 'Templates' },
+  { to: '/policies',   icon: FileText,         label: 'Policies' },
+  { to: '/ai-chat',    icon: Bot,              label: 'AI Assistant' },
 ];
 
 const EMPLOYEE_NAV = [
   { to: '/my-onboarding', icon: CheckSquare, label: 'My Onboarding' },
+  { to: '/ai-chat',       icon: Bot,         label: 'AI Assistant' },
 ];
 
 export function AppLayout() {
@@ -113,20 +118,29 @@ export function AppLayout() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile top bar */}
-        <header className="lg:hidden flex items-center gap-3 px-4 py-3 bg-gray-900 border-b border-gray-800">
+        {/* Top bar — visible on all sizes; mobile gets hamburger, desktop gets notification bell */}
+        <header className="flex items-center gap-3 px-4 py-3 bg-gray-900 border-b border-gray-800">
+          {/* Hamburger — mobile only */}
           <button
             onClick={() => setSidebarOpen(true)}
-            className="p-2 rounded-lg hover:bg-gray-800 text-gray-400"
+            className="lg:hidden p-2 rounded-lg hover:bg-gray-800 text-gray-400"
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="flex items-center gap-2">
+
+          {/* Mobile logo */}
+          <div className="flex lg:hidden items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-navy-600 flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
             <span className="font-semibold text-white text-sm">OnboardAI</span>
           </div>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Notification bell — always visible */}
+          <NotificationDrawer />
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 lg:p-8">
@@ -136,4 +150,3 @@ export function AppLayout() {
     </div>
   );
 }
-

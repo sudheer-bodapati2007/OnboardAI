@@ -12,6 +12,9 @@ import authRoutes from './modules/auth/auth.routes.js';
 import employeeRoutes from './modules/employees/employees.routes.js';
 import onboardingRoutes from './modules/onboarding/onboarding.routes.js';
 import taskRoutes from './modules/onboarding/tasks.routes.js';
+import policyRoutes from './modules/policy/policy.routes.js';
+import notificationRoutes from './modules/notifications/notifications.routes.js';
+import aiRoutes from './modules/ai/ai.routes.js';
 
 // Employee-task sub-routes (mounted under employees router)
 import { authenticate, requireHrAdmin } from './middleware/auth.js';
@@ -96,6 +99,9 @@ app.get(
 
 app.use('/api/v1/onboarding', onboardingRoutes);
 app.use('/api/v1/tasks', taskRoutes);
+app.use('/api/v1/policies', policyRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
+app.use('/api/v1/ai', aiRoutes);
 
 // ─── 404 handler ─────────────────────────────────────────────────────────────
 app.use('*', (req, res) => {

@@ -13,6 +13,8 @@ import EmployeeFormPage from './pages/EmployeeFormPage.jsx';
 import EmployeeDetailPage from './pages/EmployeeDetailPage.jsx';
 import TemplatesPage from './pages/TemplatesPage.jsx';
 import MyOnboardingPage from './pages/MyOnboardingPage.jsx';
+import PolicyPage from './pages/PolicyPage.jsx';
+import AIChatPage from './pages/AIChatPage.jsx';
 import NotFoundPage from './pages/NotFoundPage.jsx';
 
 export default function App() {
@@ -89,6 +91,26 @@ export default function App() {
             element={
               <ProtectedRoute requiredRole="employee">
                 <MyOnboardingPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Phase 2 — HR admin only */}
+          <Route
+            path="/policies"
+            element={
+              <ProtectedRoute requiredRole="hr_admin">
+                <PolicyPage />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Phase 2 — all authenticated users */}
+          <Route
+            path="/ai-chat"
+            element={
+              <ProtectedRoute>
+                <AIChatPage />
               </ProtectedRoute>
             }
           />

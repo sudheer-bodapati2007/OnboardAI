@@ -3,6 +3,7 @@ import { OnboardingTemplate } from '../../models/OnboardingTemplate.js';
 import { OnboardingTask } from '../../models/OnboardingTask.js';
 import { Employee } from '../../models/Employee.js';
 import { AppError } from '../../utils/AppError.js';
+import { createNotification } from '../notifications/notifications.service.js';
 
 // ─── Templates ───────────────────────────────────────────────────────────────
 
@@ -72,6 +73,19 @@ export async function startOnboarding(organizationId, employeeId, templateId) {
   });
 
   const tasks = await OnboardingTask.insertMany(taskDocs);
+
+  // Notify the employee's linked user account (fire-and-forget — never throws)
+  if (employee.userId) {
+    createNotification({
+      organizationId,
+      userId: employee.userId,
+      type: 'onboarding_assigned',
+      title: 'Your onboarding plan is ready',
+      body: `Your onboarding checklist "${template.name}" has been assigned. ${tasks.length} task(s) await you.`,
+      relatedEmployeeId: employee._id,
+    }).catch(() => {});
+  }
+
   return tasks;
 }
 
@@ -128,6 +142,24 @@ export async function updateTaskStatus(organizationId, taskId, status, requestin
   task.status = status;
   task.completedAt = status === 'completed' ? new Date() : null;
   await task.save();
+
+  // Notify on task completion (fire-and-forget)
+  if (status === 'completed') {
+    // Find the employee to get the userId for the notification recipient
+    const employee = await Employee.findById(task.employeeId).lean();
+    if (employee?.userId) {
+      createNotification({
+        organizationId,
+        userId: requestingUser._id,
+        type: 'task_completed',
+        title: 'Task completed',
+        body: `"${task.title}" was marked complete.`,
+        relatedEmployeeId: task.employeeId,
+        relatedTaskId: task._id,
+      }).catch(() => {});
+    }
+  }
+
   return task.toObject();
 }
 
