@@ -92,3 +92,4 @@
 - `.env.example` files contain placeholder values only.
 - `JWT_SECRET` should be a cryptographically random string of at least 64 characters.
 - `MONGODB_URI` contains credentials and must be treated as a secret.
+
