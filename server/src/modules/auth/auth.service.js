@@ -43,6 +43,20 @@ export async function findOrCreateUser(googlePayload) {
     user.email = email.toLowerCase();
     user.name = name;
     user.picture = picture ?? user.picture;
+
+    // Bootstrap promotion for existing users:
+    // If the seed email is configured and this user matches it, and no
+    // hr_admin yet exists in their org, promote them now.
+    // Never downgrade — only promote employee → hr_admin.
+    if (
+      user.role !== 'hr_admin' &&
+      env.adminSeedEmail &&
+      email.toLowerCase() === env.adminSeedEmail.toLowerCase() &&
+      (await User.countDocuments({ role: 'hr_admin', organizationId: user.organizationId })) === 0
+    ) {
+      user.role = 'hr_admin';
+    }
+
     await user.save();
     return user;
   }
