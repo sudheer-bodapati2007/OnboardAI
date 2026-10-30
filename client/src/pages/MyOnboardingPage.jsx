@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   CheckCircle2, Circle, Clock, AlertCircle, Sparkles, ChevronDown, ChevronUp,
+  RotateCcw, Loader2,
 } from 'lucide-react';
 import { onboardingApi, tasksApi } from '../services/api.js';
 import { ProgressBar } from '../components/ui/ProgressBar.jsx';
@@ -12,15 +13,14 @@ import { ErrorMessage } from '../components/ui/ErrorMessage.jsx';
 import { EmptyState } from '../components/ui/EmptyState.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
 
-const STATUS_ORDER = ['pending', 'in_progress', 'completed'];
-
 export default function MyOnboardingPage() {
   const { user } = useAuth();
   const [employee, setEmployee] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [updatingTask, setUpdatingTask] = useState(null);
+  const [updatingTask, setUpdatingTask] = useState(null); // task._id being updated
+  const [taskErrors, setTaskErrors] = useState({}); // { [taskId]: errorMessage }
   const [expandedCategories, setExpandedCategories] = useState({});
 
   const fetchTasks = useCallback(async () => {
@@ -42,15 +42,18 @@ export default function MyOnboardingPage() {
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
-  async function cycleStatus(task) {
-    const currentIndex = STATUS_ORDER.indexOf(task.status);
-    const nextStatus = STATUS_ORDER[(currentIndex + 1) % STATUS_ORDER.length];
+  async function setTaskStatus(task, newStatus) {
+    if (updatingTask === task._id) return; // prevent duplicate clicks
     setUpdatingTask(task._id);
+    setTaskErrors((prev) => ({ ...prev, [task._id]: null }));
     try {
-      const res = await tasksApi.updateStatus(task._id, nextStatus);
+      const res = await tasksApi.updateStatus(task._id, newStatus);
       setTasks((prev) => prev.map((t) => t._id === task._id ? res.data.task : t));
-    } catch {
-      // Could display inline error
+    } catch (err) {
+      setTaskErrors((prev) => ({
+        ...prev,
+        [task._id]: err?.response?.data?.message ?? err.message ?? 'Failed to update task',
+      }));
     } finally {
       setUpdatingTask(null);
     }
@@ -145,51 +148,107 @@ export default function MyOnboardingPage() {
                 {isExpanded && (
                   <div className="border-t border-gray-800 divide-y divide-gray-800/50">
                     {catTasks.map((task) => {
+                      const isCompleted = task.status === 'completed';
+                      const isUpdating = updatingTask === task._id;
                       const isOverdueTask =
-                        task.status !== 'completed' && task.dueDate && new Date(task.dueDate) < now;
+                        !isCompleted && task.dueDate && new Date(task.dueDate) < now;
+                      const taskError = taskErrors[task._id];
 
                       return (
-                        <div key={task._id} className="flex items-start gap-3 p-4">
-                          {/* Status toggle button */}
-                          <button
-                            onClick={() => cycleStatus(task)}
-                            disabled={updatingTask === task._id}
-                            className="mt-0.5 flex-shrink-0 transition-transform hover:scale-110 disabled:opacity-50"
-                            title={`Click to advance status (current: ${task.status})`}
-                          >
-                            {task.status === 'completed' ? (
-                              <CheckCircle2 className="w-5 h-5 text-green-400" />
-                            ) : task.status === 'in_progress' ? (
-                              <Clock className="w-5 h-5 text-blue-400" />
-                            ) : isOverdueTask ? (
-                              <AlertCircle className="w-5 h-5 text-red-400" />
-                            ) : (
-                              <Circle className="w-5 h-5 text-gray-500" />
-                            )}
-                          </button>
-
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-200'}`}>
-                              {task.title}
-                            </p>
-                            {task.description && (
-                              <p className="text-xs text-gray-500 mt-1">{task.description}</p>
-                            )}
-                            <div className="flex items-center gap-3 mt-1.5">
-                              {task.dueDate && (
-                                <span className={`text-xs ${isOverdueTask ? 'text-red-400' : 'text-gray-500'}`}>
-                                  Due {fmtDate(task.dueDate)}
-                                </span>
+                        <div
+                          key={task._id}
+                          className={`p-4 transition-colors ${
+                            isCompleted
+                              ? 'bg-green-900/10 border-l-2 border-green-700/50'
+                              : 'hover:bg-white/[0.02]'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            {/* Status icon */}
+                            <div className="mt-0.5 flex-shrink-0">
+                              {isCompleted ? (
+                                <CheckCircle2 className="w-5 h-5 text-green-400" />
+                              ) : task.status === 'in_progress' ? (
+                                <Clock className="w-5 h-5 text-blue-400" />
+                              ) : isOverdueTask ? (
+                                <AlertCircle className="w-5 h-5 text-red-400" />
+                              ) : (
+                                <Circle className="w-5 h-5 text-gray-500" />
                               )}
-                              {task.completedAt && (
-                                <span className="text-xs text-green-400">
-                                  ✓ {fmtDate(task.completedAt)}
-                                </span>
+                            </div>
+
+                            {/* Task content */}
+                            <div className="flex-1 min-w-0">
+                              <p
+                                className={`text-sm font-medium ${
+                                  isCompleted ? 'line-through text-gray-500' : 'text-gray-200'
+                                }`}
+                              >
+                                {task.title}
+                              </p>
+                              {task.description && (
+                                <p className="text-xs text-gray-500 mt-1">{task.description}</p>
+                              )}
+                              <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                                {task.dueDate && (
+                                  <span className={`text-xs ${isOverdueTask ? 'text-red-400' : 'text-gray-500'}`}>
+                                    Due {fmtDate(task.dueDate)}
+                                  </span>
+                                )}
+                                {task.completedAt && (
+                                  <span className="text-xs text-green-400">
+                                    ✓ Completed {fmtDate(task.completedAt)}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Per-task error */}
+                              {taskError && (
+                                <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
+                                  <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                                  {taskError}
+                                </p>
+                              )}
+                            </div>
+
+                            {/* Right-side: badge + action */}
+                            <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                              <Badge variant={task.status} />
+
+                              {/* Action button */}
+                              {isCompleted ? (
+                                <button
+                                  onClick={() => setTaskStatus(task, 'pending')}
+                                  disabled={isUpdating}
+                                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                  title="Undo completion"
+                                >
+                                  {isUpdating ? (
+                                    <Loader2 className="w-3 h-3 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="w-3 h-3" />
+                                  )}
+                                  Undo
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setTaskStatus(task, 'completed')}
+                                  disabled={isUpdating}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
+                                    bg-green-900/30 border border-green-700/50 text-green-400
+                                    hover:bg-green-900/50 hover:border-green-600/60 hover:text-green-300
+                                    transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                  title="Mark this task as complete"
+                                >
+                                  {isUpdating ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <CheckCircle2 className="w-3.5 h-3.5" />
+                                  )}
+                                  {isUpdating ? 'Saving…' : 'Mark Complete'}
+                                </button>
                               )}
                             </div>
                           </div>
-
-                          <Badge variant={task.status} />
                         </div>
                       );
                     })}
@@ -218,4 +277,3 @@ function fmtDate(d) {
   if (!d) return '';
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
-
