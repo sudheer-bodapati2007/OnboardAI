@@ -16,7 +16,7 @@ export async function chat(req, res, next) {
   try {
     const parsed = chatSchema.safeParse(req.body);
     if (!parsed.success) {
-      const details = parsed.error.errors.map((e) => ({ field: e.path.join('.'), message: e.message }));
+      const details = parsed.error.issues.map((e) => ({ field: e.path.join('.'), message: e.message }));
       return next(Object.assign(new AppError('Validation failed', 422), { code: 'VALIDATION_ERROR', details }));
     }
 
