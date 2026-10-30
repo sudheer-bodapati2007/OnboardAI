@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { env } from '../../config/env.js';
 import { User } from '../../models/User.js';
 import { Organization } from '../../models/Organization.js';
+import { Employee } from '../../models/Employee.js';
 import { AppError } from '../../utils/AppError.js';
 
 const googleClient = new OAuth2Client(env.googleClientId);
@@ -32,6 +33,10 @@ export async function verifyGoogleToken(idToken) {
  * Find or create a user from a verified Google payload.
  * Role is NEVER taken from the client — it defaults to 'employee'.
  * The ADMIN_SEED_EMAIL env var allows the very first admin bootstrap.
+ *
+ * After resolving the User, we also link any Employee record in the same org
+ * whose email matches and whose userId is still null.  This covers the common
+ * case where HR creates an employee before that person's first Google login.
  */
 export async function findOrCreateUser(googlePayload) {
   const { sub: googleId, email, name, picture } = googlePayload;
@@ -58,6 +63,10 @@ export async function findOrCreateUser(googlePayload) {
     }
 
     await user.save();
+
+    // Link any unlinked Employee record whose email matches (org-scoped, idempotent).
+    await linkEmployeeAccount(user);
+
     return user;
   }
 
@@ -86,7 +95,36 @@ export async function findOrCreateUser(googlePayload) {
     isActive: true,
   });
 
+  // Link any unlinked Employee record whose email matches (org-scoped, idempotent).
+  await linkEmployeeAccount(user);
+
   return user;
+}
+
+/**
+ * Link a User account to any Employee record in the same org that shares the
+ * same email address but has no userId yet.
+ *
+ * Safe guarantees:
+ *  - Org-scoped: only touches Employee records in user.organizationId.
+ *  - Idempotent: `userId: null` filter means already-linked records are skipped.
+ *  - Non-destructive: only sets userId; never changes role, tasks, or other fields.
+ *  - Never throws: a failure here must not block authentication.
+ */
+async function linkEmployeeAccount(user) {
+  try {
+    await Employee.findOneAndUpdate(
+      {
+        email: user.email,            // already normalised to lowercase
+        organizationId: user.organizationId,
+        userId: null,                 // idempotency — skip already-linked records
+      },
+      { $set: { userId: user._id } }
+    );
+  } catch (err) {
+    // Log but never surface — auth must not fail because of a linking error.
+    console.error('[auth] Employee account linking failed:', err.message);
+  }
 }
 
 /**
