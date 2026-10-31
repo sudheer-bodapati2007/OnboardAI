@@ -46,3 +46,6 @@ pids/
 # Optional npm cache
 .npm
 
+
+# Uploaded private documents
+server/uploads/

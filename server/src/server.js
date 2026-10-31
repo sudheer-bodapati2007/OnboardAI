@@ -1,6 +1,7 @@
 // src/server.js
 import { validateEnv } from './config/env.js';
 import { connectDB } from './config/database.js';
+import { configureDns } from './config/dns.js';
 import app from './app.js';
 import { env } from './config/env.js';
 
@@ -8,6 +9,9 @@ import { env } from './config/env.js';
 validateEnv();
 
 async function start() {
+  // Apply DNS settings before Mongoose resolves the Atlas SRV record.
+  configureDns({ mongoUri: env.mongoUri });
+
   await connectDB();
 
   const server = app.listen(env.port, () => {

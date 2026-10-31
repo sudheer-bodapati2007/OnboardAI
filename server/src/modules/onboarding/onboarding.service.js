@@ -56,8 +56,12 @@ export async function startOnboarding(organizationId, employeeId, templateId) {
   const startDate = employee.startDate ?? new Date();
 
   const taskDocs = template.tasks.map((t) => {
+    // Use UTC arithmetic to avoid timezone-driven day shifts.
+    // employee.startDate is stored as UTC midnight; setDate/getDate would
+    // apply local-timezone offsets and could shift the date by ±1 day in
+    // non-UTC environments.  setUTCDate/getUTCDate stays in UTC throughout.
     const dueDate = new Date(startDate);
-    dueDate.setDate(dueDate.getDate() + (t.dueDayOffset ?? 0));
+    dueDate.setUTCDate(dueDate.getUTCDate() + (t.dueDayOffset ?? 0));
     return {
       organizationId,
       employeeId,

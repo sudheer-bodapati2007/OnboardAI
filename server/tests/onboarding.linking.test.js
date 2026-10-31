@@ -326,3 +326,4 @@ describe('getMyTasks — query correctness', () => {
     assert.equal(result.tasks[0]._id, 't1');
   });
 });
+

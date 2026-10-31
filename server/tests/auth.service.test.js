@@ -164,3 +164,4 @@ describe('findOrCreateUser — existing user seed promotion', () => {
     assert.equal(result.role, 'employee', 'no cross-org promotion when org already has admin');
   });
 });
+
