@@ -23,6 +23,8 @@ import { validate } from './middleware/validate.js';
 import { startOnboardingSchema } from './modules/onboarding/onboarding.validation.js';
 
 const app = express();
+// Trust Render's reverse proxy for client IP detection and rate limiting.
+app.set('trust proxy', 1);
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 app.use(

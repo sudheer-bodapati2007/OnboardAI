@@ -140,7 +140,7 @@ export function issueSessionCookie(res, user) {
   res.cookie('token', token, {
     httpOnly: true,
     secure: env.isProd,
-    sameSite: env.isProd ? 'strict' : 'lax',
+    sameSite: env.isProd ? 'none' : 'lax',
     maxAge: SESSION_DURATION * 1000,
     path: '/',
   });
@@ -152,7 +152,7 @@ export function clearSessionCookie(res) {
   res.clearCookie('token', {
     httpOnly: true,
     secure: env.isProd,
-    sameSite: env.isProd ? 'strict' : 'lax',
+    sameSite: env.isProd ? 'none' : 'lax',
     path: '/',
   });
 }

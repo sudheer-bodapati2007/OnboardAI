@@ -436,7 +436,7 @@ describe('JWT cookie security', () => {
       return {
         httpOnly: true,
         secure: isProd,
-        sameSite: isProd ? 'strict' : 'lax',
+        sameSite: isProd ? 'none' : 'lax',
         maxAge: 8 * 60 * 60 * 1000,
         path: '/',
       };
@@ -456,12 +456,13 @@ describe('JWT cookie security', () => {
     assert.equal(buildCookieOptions(false).secure, false);
   });
 
-  it('sameSite=strict in production, lax in development', () => {
-    function buildCookieOptions(isProd) {
-      return { sameSite: isProd ? 'strict' : 'lax' };
-    }
-    assert.equal(buildCookieOptions(true).sameSite, 'strict');
-    assert.equal(buildCookieOptions(false).sameSite, 'lax');
+  it('sameSite=none in production, lax in development', () => {
+  function buildCookieOptions(isProd) {
+    return { sameSite: isProd ? 'none' : 'lax' };
+  }
+
+  assert.equal(buildCookieOptions(true).sameSite, 'none');
+  assert.equal(buildCookieOptions(false).sameSite, 'lax');
   });
 
   it('session expires within 8 hours (not days)', () => {
