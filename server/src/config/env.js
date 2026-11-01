@@ -36,8 +36,13 @@ export const env = {
 
   // AI provider
   geminiApiKey: process.env.GEMINI_API_KEY ?? null,
-  geminiChatModel: process.env.GEMINI_CHAT_MODEL ?? 'gemini-1.5-flash',
-  geminiEmbedModel: process.env.GEMINI_EMBED_MODEL ?? 'text-embedding-004',
+  geminiChatModel: process.env.GEMINI_CHAT_MODEL ?? 'gemini-3.8-flash',
+  geminiEmbedModel: process.env.GEMINI_EMBED_MODEL ?? 'gemini-embedding-001',
+
+  // Gemini request reliability
+  geminiRequestTimeoutMs: parseInt(process.env.GEMINI_REQUEST_TIMEOUT_MS ?? '30000', 10),
+  geminiEmbedTimeoutMs: parseInt(process.env.GEMINI_EMBED_TIMEOUT_MS ?? '8000', 10),
+  geminiMaxRetries: parseInt(process.env.GEMINI_MAX_RETRIES ?? '2', 10),
 
   // Storage
   storageProvider: process.env.STORAGE_PROVIDER ?? 'local',

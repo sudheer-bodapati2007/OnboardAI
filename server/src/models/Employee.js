@@ -52,6 +52,7 @@ const employeeSchema = new mongoose.Schema(
       enum: ['active', 'inactive', 'onboarding'],
       default: 'onboarding',
     },
+    profileImageUrl: { type: String, default: null },
   },
   { timestamps: true }
 );

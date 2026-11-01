@@ -2,6 +2,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext.jsx';
+import { ThemeProvider } from './contexts/ThemeContext.jsx';
 import { ProtectedRoute } from './components/ProtectedRoute.jsx';
 import { AppLayout } from './layouts/AppLayout.jsx';
 
@@ -20,7 +21,8 @@ import NotFoundPage from './pages/NotFoundPage.jsx';
 export default function App() {
   return (
     <AuthProvider>
-      <Routes>
+      <ThemeProvider>
+        <Routes>
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
 
@@ -119,6 +121,7 @@ export default function App() {
         {/* 404 */}
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
+      </ThemeProvider>
     </AuthProvider>
   );
 }

@@ -48,6 +48,10 @@ export const employeesApi = {
   getTasks: (id) => api.get(`/employees/${id}/tasks`),
   startOnboarding: (id, templateId) =>
     api.post(`/employees/${id}/onboarding`, { templateId }),
+  uploadProfileImage: (formData) =>
+    api.post('/employees/me/profile-image', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 };
 
 // ─── Onboarding ───────────────────────────────────────────────────────────────

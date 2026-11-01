@@ -22,14 +22,14 @@ function StatCard({ icon: Icon, label, value, sub, color = 'navy' }) {
     purple: 'text-purple-400 bg-purple-900/50 border-purple-800/50',
   };
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-xl p-5 flex items-start gap-4">
+    <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl p-5 flex items-start gap-4">
       <div className={`w-10 h-10 rounded-lg border flex items-center justify-center flex-shrink-0 ${colors[color]}`}>
         <Icon className="w-5 h-5" />
       </div>
       <div>
-        <p className="text-gray-400 text-xs font-medium uppercase tracking-wider">{label}</p>
-        <p className="text-2xl font-bold text-white mt-0.5">{value ?? '—'}</p>
-        {sub && <p className="text-gray-500 text-xs mt-1">{sub}</p>}
+        <p className="text-gray-500 dark:text-gray-400 text-xs font-medium uppercase tracking-wider">{label}</p>
+        <p className="text-2xl font-bold text-gray-900 dark:text-white mt-0.5">{value ?? '—'}</p>
+        {sub && <p className="text-gray-400 dark:text-gray-500 text-xs mt-1">{sub}</p>}
       </div>
     </div>
   );
@@ -58,19 +58,25 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchOverview(); }, []);
 
+  // Poll every 30s so dashboard stats update without manual refresh
+  useEffect(() => {
+    const interval = setInterval(fetchOverview, 30_000);
+    return () => clearInterval(interval);
+  }, [fetchOverview]);
+
   if (loading) return <PageLoading message="Loading dashboard…" />;
   if (error) return <ErrorMessage message={error} onRetry={fetchOverview} />;
 
   const { employees, tasks, recentActivity, departmentBreakdown } = data;
 
   return (
-    <div className="animate-fadeIn space-y-8">
+    <div className="animate-fadeIn space-y-8 bg-white dark:bg-gray-900 min-h-screen">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-white">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
           Good {getGreeting()}, {user?.name?.split(' ')[0]} 👋
         </h1>
-        <p className="text-gray-400 text-sm mt-1">Here's what's happening with your onboarding today.</p>
+        <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Here's what's happening with your onboarding today.</p>
       </div>
 
       {/* Employee stats */}

@@ -1,6 +1,10 @@
 // src/modules/employees/employees.service.js
 import { Employee } from '../../models/Employee.js';
 import { AppError } from '../../utils/AppError.js';
+import { storage } from '../../config/storage.js';
+import { env } from '../../config/env.js';
+import { randomUUID } from 'node:crypto';
+import { validateImageSignature } from './employees.upload.js';
 
 /**
  * Create a new employee within the authenticated user's organization.
@@ -66,15 +70,43 @@ export async function updateEmployee(organizationId, employeeId, data) {
 }
 
 /**
- * Update employee status (deactivate without deleting onboarding history).
+ * Upload a profile image for the authenticated user's own employee record.
+ * Only the user linked to the employee record can upload their own image.
  */
-export async function updateEmployeeStatus(organizationId, employeeId, status) {
-  const employee = await Employee.findOneAndUpdate(
-    { _id: employeeId, organizationId },
-    { $set: { status } },
+export async function uploadProfileImage(organizationId, userId, buffer, originalName, mimeType) {
+  // Validate actual image content (magic bytes)
+  if (!validateImageSignature(buffer)) {
+    throw new AppError('File does not appear to be a valid image', 400);
+  }
+
+  // Find the employee linked to this user account
+  const employee = await Employee.findOne({ userId, organizationId });
+  if (!employee) throw new AppError('Employee record not found', 404);
+
+  // Generate a safe storage key
+  const ext = originalName.split('.').pop() ?? 'jpg';
+  const storageKey = `${organizationId}/profile-images/${userId}/${randomUUID()}.${ext}`;
+
+  // Persist file
+  await storage.save(storageKey, buffer);
+
+  // Build a public URL for the image
+  let imageUrl;
+  if (env.storageProvider === 'gcs') {
+    imageUrl = `https://storage.googleapis.com/${env.gcsBucket}/${storageKey}`;
+  } else {
+    // Local storage — serve via a static endpoint or direct path
+    imageUrl = `/uploads/${storageKey}`;
+  }
+
+  // Update employee record
+  const updated = await Employee.findOneAndUpdate(
+    { _id: employee._id, organizationId },
+    { $set: { profileImageUrl: imageUrl } },
     { new: true }
   ).lean();
-  if (!employee) throw new AppError('Employee not found', 404);
-  return employee;
+
+  if (!updated) throw new AppError('Employee not found', 404);
+  return updated;
 }
 

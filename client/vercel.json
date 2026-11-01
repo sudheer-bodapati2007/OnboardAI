@@ -1,0 +1,16 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "builds": [
+    { "src": "package.json", "use": "@vercel/static-build" }
+  ],
+  "routes": [
+    // Proxy API calls to the Render backend
+    { "src": "/api/v1/(.*)", "headers": { "Access-Control-Allow-Credentials": "true" }, "dest": "${API_BASE_URL}/api/v1/$1" },
+    // Serve static assets from the Vite build output
+    { "src": "/assets/(.*)", "dest": "/assets/$1" },
+    { "src": "/icon.svg", "dest": "/icon.svg" },
+    // SPA fallback: all other routes serve index.html so React Router handles them
+    { "src": "/(.*)", "dest": "/index.html" }
+  ]
+}

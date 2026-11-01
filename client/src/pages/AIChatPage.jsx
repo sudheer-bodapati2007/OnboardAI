@@ -60,7 +60,16 @@ function MessageBubble({ msg }) {
           {msg.error && (
             <div className="flex items-start gap-2 mb-2 px-3 py-2 rounded-lg bg-red-900/30 border border-red-700/40 text-red-300 text-xs">
               <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-              <span>{msg.error}</span>
+              <div className="flex-1 min-w-0">
+                <span>{msg.error}</span>
+              </div>
+              <button
+                onClick={() => handleSend(true)}
+                className="text-xs text-blue-400 hover:text-blue-300 underline ml-2 flex-shrink-0"
+                disabled={loading}
+              >
+                Retry
+              </button>
             </div>
           )}
 
@@ -95,6 +104,7 @@ export default function AIChatPage() {
   ]);
   const [input, setInput]     = useState('');
   const [loading, setLoading] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const bottomRef             = useRef(null);
   const inputRef              = useRef(null);
 
@@ -102,16 +112,38 @@ export default function AIChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const handleSend = async () => {
+  const errorForStatus = (status, message) => {
+    if (status === 503) {
+      // Distinguish missing API key configuration from service unavailable.
+      const lowerMsg = (message ?? '').toLowerCase();
+      if (lowerMsg.includes('configured') || lowerMsg.includes('api key')) {
+        return 'The AI assistant is not configured. Ask your administrator to add a GEMINI_API_KEY.';
+      }
+      return 'The AI service is temporarily unavailable due to high demand. Please try again later.';
+    }
+    if (status === 429) return 'The AI service is rate-limited. Please wait a moment and try again.';
+    if (status === 504) return 'The AI service timed out. Please try again.';
+    if (status === 502) return message || 'The AI service is temporarily unavailable. Please try again.';
+    return message || 'Something went wrong. Please try again.';
+  };
+
+  const handleSend = async (isRetry = false) => {
     const question = input.trim();
     if (!question || loading) return;
 
     setInput('');
     setLoading(true);
+    setRetrying(false);
 
-    // Optimistically add user message
+    // Optimistically add user message (avoid duplicates on retry)
     const userMsg = { role: 'user', content: question };
-    setMessages((prev) => [...prev, userMsg]);
+    setMessages((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.role === 'user' && last.content === question && !isRetry) {
+        return prev;
+      }
+      return [...prev, userMsg];
+    });
 
     try {
       // Build history (exclude the welcome message)
@@ -134,14 +166,7 @@ export default function AIChatPage() {
       ]);
     } catch (err) {
       const status = err.status;
-      let errMsg;
-      if (status === 503) {
-        errMsg = 'The AI assistant is not configured. Ask your administrator to add a GEMINI_API_KEY.';
-      } else if (status === 429) {
-        errMsg = 'Rate limit reached. Please wait a moment and try again.';
-      } else {
-        errMsg = err.message ?? 'Something went wrong. Please try again.';
-      }
+      const errMsg = errorForStatus(status, err.message);
 
       setMessages((prev) => [
         ...prev,

@@ -9,6 +9,7 @@ import {
   statusUpdateSchema,
   listQuerySchema,
 } from './employees.validation.js';
+import { uploadProfileImage as uploadMiddleware, handleUploadError } from './employees.upload.js';
 
 const router = Router();
 
@@ -44,6 +45,14 @@ router.patch(
   requireHrAdmin,
   validate(statusUpdateSchema),
   EmployeesController.updateEmployeeStatus
+);
+
+// Profile image upload — any authenticated user can update their own image
+router.post(
+  '/me/profile-image',
+  uploadMiddleware,
+  handleUploadError,
+  EmployeesController.uploadProfileImage
 );
 
 export default router;

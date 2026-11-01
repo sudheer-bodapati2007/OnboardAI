@@ -48,6 +48,12 @@ export default function EmployeeDetailPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Poll every 30s so task status changes appear without manual refresh
+  useEffect(() => {
+    const interval = setInterval(fetchData, 30_000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
+
   const completedCount = tasks.filter((t) => t.status === 'completed').length;
   const completionPct = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;
   const now = new Date();

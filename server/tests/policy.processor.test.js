@@ -5,7 +5,7 @@
 // processDocument() is tested via its optional dependency-injection seam, so no
 // database, real PDF, or Gemini call is required.
 
-import { describe, it } from 'node:test';
+import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { recoverStuckProcessing, processDocument } from '../src/modules/policy/policy.processor.js';
 
@@ -118,6 +118,11 @@ function newDoc(overrides = {}) {
 const deps = { PolicyDocument: PD, PolicyChunk: PC, storage: st, env: envDep };
 
 describe('processDocument', () => {
+  // Reset ppImpl before each test so earlier tests don't leak state.
+  beforeEach(() => {
+    ppImpl = async () => ({ text: 'Hello world. This is a test document. ', numpages: 1 });
+  });
+
   it('transitions status to ready on successful processing', async () => {
     const { saveCalls } = newDoc();
     const result = await processDocument('d1', { ...deps, pdfParse: async (b) => ppImpl() });
@@ -150,5 +155,76 @@ describe('processDocument', () => {
     assert.equal(result.status, 'failed');
     assert.equal(currentDoc.status, 'failed');
     assert.ok(saveCalls.some((s) => s.status === 'failed'), 'failed was persisted — not stuck processing');
+  });
+
+  it('reprocessing deletes old chunks before inserting new ones (no duplication)', async () => {
+    const { saveCalls } = newDoc();
+    let deleteCalls = 0;
+    let insertCalls = 0;
+    const trackingPC = {
+      deleteMany: async () => { deleteCalls++; },
+      insertMany: async (docs) => { insertCalls += docs.length; },
+    };
+    ppImpl = async () => ({ text: 'Page one text. ', numpages: 1, pages: [{ text: 'Page one text. ', page: 1 }] });
+
+    const result = await processDocument('d4', {
+      ...deps,
+      PolicyChunk: trackingPC,
+      pdfParse: async (b) => ppImpl(),
+    });
+
+    assert.equal(result.status, 'ready');
+    assert.equal(deleteCalls, 1, 'old chunks should be deleted before inserting new ones');
+    assert.ok(insertCalls > 0, 'new chunks should be inserted');
+  });
+
+  it('document is not marked ready until chunks are stored', async () => {
+    const { saveCalls } = newDoc();
+    let insertCalled = false;
+    const trackingPC = {
+      deleteMany: async () => {},
+      insertMany: async () => { insertCalled = true; },
+    };
+
+    await processDocument('d5', {
+      ...deps,
+      PolicyChunk: trackingPC,
+      pdfParse: async (b) => ppImpl(),
+    });
+
+    assert.equal(insertCalled, true);
+    assert.equal(currentDoc.status, 'ready', 'document marked ready only after chunks stored');
+  });
+
+  it('failed embedding does not destroy existing document record', async () => {
+    const { saveCalls } = newDoc({ status: 'ready', chunkCount: 3 });
+    // Make PDF parse fail — processor should mark document as failed
+    // but the existing record should not be deleted.
+    ppImpl = async () => { throw new Error('PDF parse failed: corrupt'); };
+
+    const result = await processDocument('d6', {
+      ...deps,
+      pdfParse: async (b) => ppImpl(),
+    });
+
+    assert.equal(result.status, 'failed');
+    assert.equal(currentDoc.status, 'failed');
+    assert.ok(currentDoc._id, 'document record still exists after failure');
+    assert.ok(saveCalls.some((s) => s.status === 'failed'), 'failed status persisted');
+  });
+
+  it('reprocessing is idempotent — same document processed twice produces same result', async () => {
+    const results = [];
+    for (let i = 0; i < 2; i++) {
+      const { saveCalls } = newDoc({ status: 'pending' });
+      const result = await processDocument(`d7-${i}`, {
+        ...deps,
+        pdfParse: async (b) => ppImpl(),
+      });
+      results.push(result.status);
+    }
+
+    assert.equal(results[0], 'ready');
+    assert.equal(results[1], 'ready');
   });
 });

@@ -2,6 +2,7 @@
 import { OnboardingTemplate } from '../../models/OnboardingTemplate.js';
 import { OnboardingTask } from '../../models/OnboardingTask.js';
 import { Employee } from '../../models/Employee.js';
+import { User } from '../../models/User.js';
 import { AppError } from '../../utils/AppError.js';
 import { createNotification } from '../notifications/notifications.service.js';
 
@@ -149,19 +150,29 @@ export async function updateTaskStatus(organizationId, taskId, status, requestin
 
   // Notify on task completion (fire-and-forget)
   if (status === 'completed') {
-    // Find the employee to get the userId for the notification recipient
     const employee = await Employee.findById(task.employeeId).lean();
-    if (employee?.userId) {
+    const employeeName = employee?.fullName ?? 'An employee';
+
+    // Notify all HR admins in the same organisation (org-scoped, not the employee themselves)
+    const hrAdmins = await User.find({
+      organizationId,
+      role: 'hr_admin',
+      isActive: true,
+    }).select('_id fullName email').lean();
+
+    const notificationPromises = hrAdmins.map((hrAdmin) =>
       createNotification({
         organizationId,
-        userId: requestingUser._id,
+        userId: hrAdmin._id,
         type: 'task_completed',
         title: 'Task completed',
-        body: `"${task.title}" was marked complete.`,
+        body: `${employeeName} marked "${task.title}" as complete.`,
         relatedEmployeeId: task.employeeId,
         relatedTaskId: task._id,
-      }).catch(() => {});
-    }
+      }).catch(() => {}),
+    );
+
+    await Promise.all(notificationPromises);
   }
 
   return task.toObject();

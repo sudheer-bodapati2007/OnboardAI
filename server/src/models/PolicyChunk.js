@@ -9,7 +9,6 @@ const policyChunkSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Organization',
       required: true,
-      index: true,
     },
     documentId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -20,7 +19,11 @@ const policyChunkSchema = new mongoose.Schema(
     text: { type: String, required: true },
     pageNumber: { type: Number, default: null },
     chunkIndex: { type: Number, default: 0 },
-    // Embedding vector as array of floats (768 dims for text-embedding-004)
+    // Embedding model used to generate this chunk's embedding.
+    // Prevents mixing embeddings from different models (e.g. text-embedding-004
+    // vs gemini-embedding-001) in retrieval.
+    embeddingModel: { type: String, default: null },
+    // Embedding vector as array of floats (768 dims for gemini-embedding-001)
     embedding: { type: [Number], required: true },
   },
   { timestamps: true }

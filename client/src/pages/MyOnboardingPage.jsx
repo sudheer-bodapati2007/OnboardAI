@@ -42,6 +42,12 @@ export default function MyOnboardingPage() {
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
+  // Poll every 30s so newly assigned tasks appear without manual refresh
+  useEffect(() => {
+    const interval = setInterval(fetchTasks, 30_000);
+    return () => clearInterval(interval);
+  }, [fetchTasks]);
+
   async function setTaskStatus(task, newStatus) {
     if (updatingTask === task._id) return; // prevent duplicate clicks
     setUpdatingTask(task._id);
@@ -79,15 +85,15 @@ export default function MyOnboardingPage() {
     setExpandedCategories((p) => ({ ...p, [cat]: !p[cat] }));
 
   return (
-    <div className="animate-fadeIn space-y-6 max-w-3xl mx-auto">
+    <div className="animate-fadeIn space-y-6 max-w-3xl mx-auto bg-white dark:bg-gray-900 min-h-screen">
       {/* Header */}
       <div className="flex items-start gap-4">
         <div className="w-12 h-12 rounded-xl bg-navy-600/20 border border-navy-600/30 flex items-center justify-center flex-shrink-0">
           <Sparkles className="w-6 h-6 text-navy-400" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-white">My Onboarding</h1>
-          <p className="text-gray-400 text-sm mt-0.5">
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">My Onboarding</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-0.5">
             Welcome, {user?.name?.split(' ')[0]}! Track your onboarding progress below.
           </p>
         </div>
@@ -101,18 +107,18 @@ export default function MyOnboardingPage() {
       ) : (
         <>
           {/* Progress summary */}
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
                   {employee.jobTitle} · {employee.department}
                 </p>
-                <p className="text-lg font-semibold text-white mt-0.5">
+                <p className="text-lg font-semibold text-gray-900 dark:text-white mt-0.5">
                   {completed}/{tasks.length} tasks completed
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-3xl font-bold text-white">{pct}%</p>
+                <p className="text-3xl font-bold text-gray-900 dark:text-white">{pct}%</p>
                 {overdue > 0 && (
                   <p className="text-xs text-red-400 mt-1">{overdue} overdue</p>
                 )}
@@ -157,10 +163,10 @@ export default function MyOnboardingPage() {
                       return (
                         <div
                           key={task._id}
-                          className={`p-4 transition-colors ${
+                          className={`p-4 transition-colors border rounded-lg bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 ${
                             isCompleted
-                              ? 'bg-green-900/10 border-l-2 border-green-700/50'
-                              : 'hover:bg-white/[0.02]'
+                              ? 'bg-green-50 border-l-2 border-green-500 dark:bg-green-900/20 dark:border-green-500/50'
+                              : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
                           }`}
                         >
                           <div className="flex items-start gap-3">
@@ -181,17 +187,17 @@ export default function MyOnboardingPage() {
                             <div className="flex-1 min-w-0">
                               <p
                                 className={`text-sm font-medium ${
-                                  isCompleted ? 'line-through text-gray-500' : 'text-gray-200'
+                                  isCompleted ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-900 dark:text-white'
                                 }`}
                               >
                                 {task.title}
                               </p>
                               {task.description && (
-                                <p className="text-xs text-gray-500 mt-1">{task.description}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{task.description}</p>
                               )}
                               <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                                 {task.dueDate && (
-                                  <span className={`text-xs ${isOverdueTask ? 'text-red-400' : 'text-gray-500'}`}>
+                                  <span className={`text-xs ${isOverdueTask ? 'text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
                                     Due {fmtDate(task.dueDate)}
                                   </span>
                                 )}
@@ -219,7 +225,7 @@ export default function MyOnboardingPage() {
                                 <button
                                   onClick={() => setTaskStatus(task, 'pending')}
                                   disabled={isUpdating}
-                                  className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                  className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Undo completion"
                                 >
                                   {isUpdating ? (
@@ -234,7 +240,7 @@ export default function MyOnboardingPage() {
                                   onClick={() => setTaskStatus(task, 'completed')}
                                   disabled={isUpdating}
                                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                                    bg-green-900/30 border border-green-700/50 text-green-400
+                                    bg-green-900/30 border border-green-700/50 text-green-400 dark:bg-green-900/20 dark:border-green-600/50 dark:text-green-300
                                     hover:bg-green-900/50 hover:border-green-600/60 hover:text-green-300
                                     transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Mark this task as complete"
@@ -259,10 +265,10 @@ export default function MyOnboardingPage() {
           })}
 
           {pct === 100 && (
-            <div className="rounded-xl bg-green-900/20 border border-green-700/50 p-6 text-center">
+            <div className="rounded-xl bg-green-50 border border-green-200 dark:bg-green-900/20 dark:border-green-700/50 p-6 text-center">
               <CheckCircle2 className="w-10 h-10 text-green-400 mx-auto mb-3" />
-              <h3 className="text-lg font-semibold text-white mb-1">🎉 Onboarding Complete!</h3>
-              <p className="text-gray-400 text-sm">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">🎉 Onboarding Complete!</h3>
+              <p className="text-gray-500 dark:text-gray-400 text-sm">
                 You've completed all your onboarding tasks. Welcome to the team!
               </p>
             </div>
