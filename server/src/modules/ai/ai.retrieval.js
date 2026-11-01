@@ -9,6 +9,22 @@ import { env } from '../../config/env.js';
 
 const SIMILARITY_THRESHOLD = 0.70; // minimum cosine similarity to include a chunk
 const TOP_K = 5;                    // max chunks to retrieve
+// Must be shorter than GEMINI_REQUEST_TIMEOUT_MS in ai.chat.js and the client
+// axios timeout (15s) so a slow embedding call degrades instead of hanging.
+const EMBED_REQUEST_TIMEOUT_MS = 8000;
+
+/**
+ * Race a promise against a timeout. Rejects with a timeout error if it takes
+ * too long. The timeout promise is silenced so it can never surface as an
+ * unhandled rejection when the wrapped promise wins.
+ */
+function withTimeout(promise, ms, message) {
+  const timeout = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(message)), ms);
+  });
+  timeout.catch(() => {}); // avoid unhandled rejection if the wrapped promise wins
+  return Promise.race([promise, timeout]);
+}
 
 /**
  * Compute cosine similarity between two vectors.
@@ -34,7 +50,11 @@ export async function embedQuery(query) {
   try {
     const genAI = new GoogleGenerativeAI(env.geminiApiKey);
     const model = genAI.getGenerativeModel({ model: env.geminiEmbedModel });
-    const result = await model.embedContent(query);
+    const result = await withTimeout(
+      model.embedContent(query),
+      EMBED_REQUEST_TIMEOUT_MS,
+      'embedContent timed out'
+    );
     return result.embedding.values;
   } catch (err) {
     console.error('[AI Retrieval] Embedding error:', err.message);

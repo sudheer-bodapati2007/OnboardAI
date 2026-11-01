@@ -117,7 +117,7 @@ export default function AIChatPage() {
       // Build history (exclude the welcome message)
       const history = messages.slice(1).map((m) => ({
         role: m.role === 'user' ? 'user' : 'model',
-        parts: [{ text: m.content }],
+        text: m.content,
       }));
 
       const res = await aiApi.chat(question, history);

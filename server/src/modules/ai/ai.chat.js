@@ -7,6 +7,23 @@ import { embedQuery, retrieveRelevantChunks } from './ai.retrieval.js';
 
 const MAX_CONTEXT_CHARS = 8000;
 
+// Must be shorter than the client axios timeout (15s) so the server answers
+// with a 504 instead of the client aborting with a network/timeout error.
+const GEMINI_REQUEST_TIMEOUT_MS = 12000;
+
+/**
+ * Race a promise against a timeout. Rejects with a timeout error if it takes
+ * too long. The timeout promise is silenced so it can never surface as an
+ * unhandled rejection when the wrapped promise wins.
+ */
+function withTimeout(promise, ms, message) {
+  const timeout = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error(message)), ms);
+  });
+  timeout.catch(() => {}); // avoid unhandled rejection if the wrapped promise wins
+  return Promise.race([promise, timeout]);
+}
+
 /**
  * Build a safe system prompt that:
  * - Grounds answers in provided evidence
@@ -44,8 +61,13 @@ function buildEvidenceBlock(chunks) {
  * Main chat handler.
  * Returns { answer, sources, insufficient }
  */
-export async function answerQuestion(organizationId, question) {
-  if (!env.geminiApiKey) {
+export async function answerQuestion(organizationId, question, {
+  env: e = env,
+  GoogleGenerativeAI: GenAI = GoogleGenerativeAI,
+  embedQuery: eq = embedQuery,
+  retrieveRelevantChunks: rc = retrieveRelevantChunks,
+} = {}) {
+  if (!e?.geminiApiKey) {
     throw new AppError(
       'AI features are not configured. Set GEMINI_API_KEY in the server environment.',
       503
@@ -53,11 +75,11 @@ export async function answerQuestion(organizationId, question) {
   }
 
   // 1. Embed the question
-  const queryEmbedding = await embedQuery(question);
+  const queryEmbedding = await eq(question);
 
   // 2. Retrieve relevant chunks (org-scoped, ready docs only)
   const chunks = queryEmbedding
-    ? await retrieveRelevantChunks(organizationId, queryEmbedding)
+    ? await rc(organizationId, queryEmbedding)
     : [];
 
   const insufficient = chunks.length === 0;
@@ -69,12 +91,16 @@ export async function answerQuestion(organizationId, question) {
   // 4. Call Gemini
   let answer;
   try {
-    const genAI = new GoogleGenerativeAI(env.geminiApiKey);
+    const genAI = new GenAI(e.geminiApiKey);
     const model = genAI.getGenerativeModel({
-      model: env.geminiChatModel,
+      model: e.geminiChatModel,
       systemInstruction: buildSystemPrompt(),
     });
-    const result = await model.generateContent(userPrompt);
+    const result = await withTimeout(
+      model.generateContent(userPrompt),
+      GEMINI_REQUEST_TIMEOUT_MS,
+      'generateContent timed out'
+    );
     answer = result.response.text();
   } catch (err) {
     // Log full error server-side; expose only a safe generic message to the client.
@@ -85,6 +111,16 @@ export async function answerQuestion(organizationId, question) {
     }
     if (msg.includes('timeout') || msg.includes('ETIMEDOUT')) {
       throw new AppError('AI service timed out. Please try again.', 504);
+    }
+    if (
+      msg.includes('not found') ||
+      msg.includes('invalid model') ||
+      msg.includes('model is not valid')
+    ) {
+      throw new AppError(
+        'The configured AI model is not available. Please check GEMINI_CHAT_MODEL.',
+        502
+      );
     }
     // Generic: do not expose raw Gemini error internals
     throw new AppError('The AI service is temporarily unavailable. Please try again.', 502);

@@ -12,6 +12,27 @@ import { env } from '../../config/env.js';
 const CHUNK_SIZE = 800;       // characters per chunk
 const CHUNK_OVERLAP = 150;    // overlap between consecutive chunks
 
+// Documents left in 'processing' after a crash/restart are considered interrupted
+// and are marked 'failed' so they never remain stuck indefinitely.
+//
+// At server startup no document should legitimately be mid-processing (the
+// previous process that was handling it is gone), so every document left in
+// 'processing' is recovered to 'failed'. This guarantees no document remains
+// stuck in 'processing' across a restart, which is what makes client polling
+// stop and the status reach a terminal state.
+export async function recoverStuckProcessing({ Model = PolicyDocument } = {}) {
+  return Model.updateMany(
+    { status: 'processing' },
+    {
+      $set: {
+        status: 'failed',
+        errorMessage:
+          'Processing did not complete. The document was interrupted (for example, the server restarted). Please re-upload it.',
+      },
+    }
+  );
+}
+
 /**
  * Split text into overlapping chunks.
  */
@@ -31,10 +52,10 @@ function chunkText(text) {
  * Get or create Gemini embedding client.
  * Returns null if GEMINI_API_KEY is not configured.
  */
-function getEmbeddingClient() {
-  if (!env.geminiApiKey) return null;
-  return new GoogleGenerativeAI(env.geminiApiKey).getGenerativeModel({
-    model: env.geminiEmbedModel,
+function getEmbeddingClient(e = env) {
+  if (!e?.geminiApiKey) return null;
+  return new GoogleGenerativeAI(e.geminiApiKey).getGenerativeModel({
+    model: e.geminiEmbedModel,
   });
 }
 
@@ -57,8 +78,14 @@ async function embedText(client, text) {
  * 5. Save chunks to MongoDB
  * 6. Update document status
  */
-export async function processDocument(documentId) {
-  const doc = await PolicyDocument.findById(documentId);
+export async function processDocument(documentId, {
+  PolicyDocument: PD = PolicyDocument,
+  PolicyChunk: PC = PolicyChunk,
+  storage: st = storage,
+  pdfParse: pp = pdfParse,
+  env: e = env,
+} = {}) {
+  const doc = await PD.findById(documentId);
   if (!doc) return;
 
   try {
@@ -69,7 +96,7 @@ export async function processDocument(documentId) {
     // Load PDF buffer from storage
     let buffer;
     try {
-      buffer = await storage.getBuffer(doc.storageKey);
+      buffer = await st.getBuffer(doc.storageKey);
     } catch (err) {
       throw new Error(`Storage read failed: ${err.message}`);
     }
@@ -77,7 +104,7 @@ export async function processDocument(documentId) {
     // Extract text
     let parsed;
     try {
-      parsed = await pdfParse(buffer);
+      parsed = await pp(buffer);
     } catch (err) {
       throw new Error(`PDF parse failed: ${err.message}`);
     }
@@ -90,10 +117,10 @@ export async function processDocument(documentId) {
     const pageCount = parsed.numpages ?? 0;
 
     // Remove existing chunks (in case of reprocessing)
-    await PolicyChunk.deleteMany({ documentId });
+    await PC.deleteMany({ documentId });
 
     const chunks = chunkText(rawText);
-    const embeddingClient = getEmbeddingClient();
+    const embeddingClient = getEmbeddingClient(e);
 
     const chunkDocs = [];
     for (let i = 0; i < chunks.length; i++) {
@@ -119,7 +146,7 @@ export async function processDocument(documentId) {
       });
     }
 
-    await PolicyChunk.insertMany(chunkDocs);
+    await PC.insertMany(chunkDocs);
 
     // Update document as ready
     doc.status = 'ready';
@@ -129,9 +156,18 @@ export async function processDocument(documentId) {
 
     return doc;
   } catch (err) {
+    // Best-effort: mark as failed so the document never stays 'processing'.
+    // A failure writing the 'failed' status must not crash or leave it stuck.
     doc.status = 'failed';
     doc.errorMessage = err.message;
-    await doc.save();
+    try {
+      await doc.save();
+    } catch (saveErr) {
+      console.error(
+        `[Policy Processor] Document ${documentId} failed and could not persist 'failed' status:`,
+        saveErr.message
+      );
+    }
     console.error(`[Policy Processor] Document ${documentId} failed:`, err.message);
     return doc;
   }
