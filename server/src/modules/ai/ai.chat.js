@@ -47,53 +47,97 @@ function backoffMs(attempt, baseMs = 1000) {
 }
 
 /**
- * Determine whether a Gemini provider error is transient and worth retrying.
+ * Classify a Gemini provider error from its HTTP status when available, then
+ * from a status embedded in the message ("[429 Too Many Requests] ..."), then
+ * from message text. The Gemini SDK often exposes only the message, so all
+ * three signals are checked — status codes always win over message words so a
+ * genuine 503 overload is never mislabelled as a 429 quota error.
  *
- * Retryable:
- *   - HTTP 503 (service unavailable / high demand)
- *   - HTTP 429 (rate limited)
- *   - Temporary network failures
- *
- * Non-retryable (permanent):
- *   - Invalid model / model not found
- *   - Invalid API key / authentication errors
- *   - Malformed requests (400 Bad Request)
- *   - Other 4xx client errors
+ * Kinds:
+ *   auth        — 401/403, invalid API key, permission denied  (permanent)
+ *   badrequest  — 400, malformed request                       (permanent)
+ *   model       — 404, model not found / invalid model         (fallback-eligible)
+ *   quota       — 429, rate limit / quota exhaustion           (retryable)
+ *   timeout     — 504 / ETIMEDOUT / our withTimeout            (retryable)
+ *   overloaded  — 503, model overloaded / high demand          (retryable)
+ *   network     — connection-level failures                    (retryable)
+ *   unknown     — anything else                                (permanent)
  */
-function isTransientProviderError(err) {
-  const msg = (err?.message ?? '').toLowerCase();
+function classifyProviderError(err) {
   const status = err?.status ?? err?.statusCode ?? null;
+  const msg = err?.message ?? '';
+  const lower = msg.toLowerCase();
 
+  const fromCode = (code) => {
+    if (code === 401 || code === 403) return 'auth';
+    if (code === 404) return 'model';
+    if (code === 400) return 'badrequest';
+    if (code === 429) return 'quota';
+    if (code === 503) return 'overloaded';
+    if (code === 504) return 'timeout';
+    return null;
+  };
+
+  const byStatus = fromCode(status);
+  if (byStatus) return byStatus;
+
+  // "[429 Too Many Requests] ..." style SDK messages.
+  const embedded = msg.match(/\[(\d{3})[^\]]*\]/);
+  if (embedded) {
+    const byEmbedded = fromCode(parseInt(embedded[1], 10));
+    if (byEmbedded) return byEmbedded;
+  }
+
+  // Message-text fallbacks — most specific first.
   if (
-    msg.includes('model not found') ||
-    msg.includes('invalid model') ||
-    msg.includes('model is not valid') ||
-    msg.includes('api key') ||
-    msg.includes('authentication') ||
-    msg.includes('permission denied')
+    lower.includes('api key') ||
+    lower.includes('unauthenticated') ||
+    lower.includes('permission denied') ||
+    lower.includes('authentication')
   ) {
-    return false;
+    return 'auth';
   }
-
-  if (status === 503 || msg.includes('503') || msg.includes('service unavailable')) {
-    return true;
-  }
-
-  if (status === 429 || msg.includes('429') || msg.includes('rate limit') || msg.includes('quota')) {
-    return true;
-  }
-
   if (
-    msg.includes('etimedout') ||
-    msg.includes('econnrefused') ||
-    msg.includes('enotfound') ||
-    msg.includes('socket hang up') ||
-    msg.includes('network error')
+    lower.includes('model not found') ||
+    lower.includes('invalid model') ||
+    lower.includes('model is not valid') ||
+    lower.includes('not found')
   ) {
-    return true;
+    return 'model';
   }
-
-  return false;
+  if (
+    lower.includes('quota') ||
+    lower.includes('rate limit') ||
+    lower.includes('rate-limited') ||
+    lower.includes('resource has been exhausted') ||
+    lower.includes('exhausted')
+  ) {
+    return 'quota';
+  }
+  if (
+    lower.includes('timeout') ||
+    lower.includes('timed out') ||
+    lower.includes('etimedout')
+  ) {
+    return 'timeout';
+  }
+  if (
+    lower.includes('503') ||
+    lower.includes('overloaded') ||
+    lower.includes('service unavailable') ||
+    lower.includes('unavailable')
+  ) {
+    return 'overloaded';
+  }
+  if (
+    lower.includes('econnrefused') ||
+    lower.includes('enotfound') ||
+    lower.includes('socket hang up') ||
+    lower.includes('network error')
+  ) {
+    return 'network';
+  }
+  return 'unknown';
 }
 
 /**
@@ -181,98 +225,143 @@ export async function answerQuestion(organizationId, question, {
   const evidenceBlock = buildEvidenceBlock(chunks);
   const userPrompt = `${evidenceBlock}\n\nQuestion: ${question}`;
 
-  // 4. Call Gemini with bounded retries for transient failures
+  // 4. Call Gemini with bounded retries and controlled model fallback.
   // A wall-clock budget caps total generation time so the server always
   // responds within the hosting proxy's request window (Render ~100s).
   const totalBudgetMs = e.geminiTotalTimeoutMs ?? 55000;
   const startedAt = Date.now();
+  // Candidate models: primary first, then the configured fallback (if any and
+  // if different). Both receive the exact same prompt, evidence and system
+  // instruction — only the model identifier changes.
+  const candidates = [e.geminiChatModel, e.geminiFallbackModel].filter(
+    (m, i, arr) => m && arr.indexOf(m) === i
+  );
+
   let answer;
   let lastErr;
   let emptyResponse = false;
-  for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
-    // Never start another attempt if the request already exhausted its budget.
-    if (attempt > 0 && Date.now() - startedAt >= totalBudgetMs) {
-      console.error('[AI Chat] Total time budget exhausted before retry.');
-      break;
-    }
-    try {
-      const genAI = new GenAI(e.geminiApiKey);
-      const model = genAI.getGenerativeModel({
-        model: e.geminiChatModel,
-        systemInstruction: buildSystemPrompt(),
-      });
-      const result = await withTimeout(
-        model.generateContent(userPrompt),
-        GEMINI_REQUEST_TIMEOUT_MS,
-        'generateContent timed out'
-      );
-      const text = result?.response?.text?.();
-      // Malformed or empty model output is a provider failure, never an answer.
-      if (typeof text !== 'string' || !text.trim()) {
-        emptyResponse = true;
-        break;
-      }
-      answer = text;
-      break; // success — exit retry loop
-    } catch (err) {
-      lastErr = err;
-      const msg = err?.message ?? '';
-      console.error(`[AI Chat] Gemini attempt ${attempt + 1} failed:`, msg);
 
-      // Don't retry permanent errors.
-      if (!isTransientProviderError(err)) {
-        if (msg.includes('quota') || msg.includes('rate') || msg.includes('429')) {
-          throw new AppError('AI service is temporarily rate-limited. Please try again shortly.', 429);
-        }
-        if (msg.includes('timeout') || msg.includes('ETIMEDOUT')) {
-          throw new AppError('AI service timed out. Please try again.', 504);
-        }
-        if (
-          msg.includes('not found') ||
-          msg.includes('invalid model') ||
-          msg.includes('model is not valid')
-        ) {
-          throw new AppError(
-            'The configured AI model is not available. Please check GEMINI_CHAT_MODEL.',
-            502
-          );
-        }
-        throw new AppError('The AI service is temporarily unavailable. Please try again.', 502);
+  outer: for (let ci = 0; ci < candidates.length; ci++) {
+    const modelName = candidates[ci];
+    for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
+      // Never start an attempt if the request already exhausted its budget.
+      if ((ci > 0 || attempt > 0) && Date.now() - startedAt >= totalBudgetMs) {
+        console.error('[AI Chat] Total time budget exhausted; no further attempts.');
+        break outer;
       }
+      try {
+        const genAI = new GenAI(e.geminiApiKey);
+        const model = genAI.getGenerativeModel({
+          model: modelName,
+          systemInstruction: buildSystemPrompt(),
+        });
+        const result = await withTimeout(
+          model.generateContent(userPrompt),
+          GEMINI_REQUEST_TIMEOUT_MS,
+          'generateContent timed out'
+        );
+        const text = result?.response?.text?.();
+        // Malformed or empty model output is a provider failure, never an answer.
+        if (typeof text !== 'string' || !text.trim()) {
+          emptyResponse = true;
+          break outer;
+        }
+        answer = text;
+        break outer;
+      } catch (err) {
+        lastErr = err;
+        const kind = classifyProviderError(err);
+        console.error(
+          `[AI Chat] Gemini attempt ${attempt + 1} with ${modelName} failed (${kind}):`,
+          err?.message ?? ''
+        );
 
-      // Don't sleep after the last attempt.
-      if (attempt >= GEMINI_MAX_RETRIES) {
-        break;
-      }
+        if (kind === 'auth' || kind === 'badrequest' || kind === 'unknown') {
+          // Permanent for every model: retrying or switching models cannot help.
+          break outer;
+        }
+        if (kind === 'model') {
+          // Primary model not available → try the fallback model (next candidate).
+          break;
+        }
 
-      // Respect Retry-After when the provider tells us how long to wait,
-      // but never wait past the total request budget.
-      const ra = retryAfterMs(err);
-      const delay = ra ?? backoffMs(attempt);
-      if (Date.now() - startedAt + delay >= totalBudgetMs) {
-        console.error('[AI Chat] Backoff would exceed total time budget; giving up.');
-        break;
+        // Retryable kinds (quota / overloaded / timeout / network).
+        if (attempt >= GEMINI_MAX_RETRIES) {
+          break; // this model's attempts are exhausted → try the fallback
+        }
+
+        // Respect Retry-After when the provider tells us how long to wait,
+        // but never wait past the total request budget.
+        const ra = retryAfterMs(err);
+        const delay = ra ?? backoffMs(attempt);
+        if (Date.now() - startedAt + delay >= totalBudgetMs) {
+          console.error('[AI Chat] Wait would exceed total time budget; trying next model.');
+          break;
+        }
+        await sleep(delay);
       }
-      await sleep(delay);
     }
   }
 
-  // All retries exhausted — classify the final error for the client.
+  // All candidates/attempts exhausted — classify the final error for the client.
   if (!answer) {
     if (emptyResponse) {
-      throw new AppError('The AI service returned an empty response. Please try again.', 502);
+      throw new AppError(
+        'The AI service returned an empty response. Please try again.',
+        502,
+        'AI_EMPTY_RESPONSE'
+      );
     }
-    const msg = lastErr?.message ?? '';
-    if (msg.includes('timeout') || msg.includes('ETIMEDOUT')) {
-      throw new AppError('AI service timed out after multiple attempts. Please try again.', 504);
+    switch (classifyProviderError(lastErr)) {
+      case 'timeout':
+        throw new AppError(
+          'AI generation took too long. Please try again.',
+          504,
+          'AI_TIMEOUT'
+        );
+      case 'quota':
+        throw new AppError(
+          'The AI quota or rate limit has been reached. Please try again later.',
+          429,
+          'AI_QUOTA'
+        );
+      case 'overloaded':
+        throw new AppError(
+          'The Gemini service is temporarily overloaded due to high demand. Please try again shortly.',
+          503,
+          'AI_OVERLOADED'
+        );
+      case 'network':
+        throw new AppError(
+          'Could not reach the AI service. Please try again shortly.',
+          503,
+          'AI_UNREACHABLE'
+        );
+      case 'model':
+        throw new AppError(
+          'The configured AI model is not available. Please check GEMINI_CHAT_MODEL and GEMINI_FALLBACK_MODEL.',
+          502,
+          'AI_MODEL'
+        );
+      case 'auth':
+        throw new AppError(
+          'The AI service rejected the API key or its permissions. Ask your administrator to check GEMINI_API_KEY.',
+          502,
+          'AI_AUTH'
+        );
+      case 'badrequest':
+        throw new AppError(
+          'The AI request could not be processed. Please try rephrasing your question.',
+          502,
+          'AI_BAD_REQUEST'
+        );
+      default:
+        throw new AppError(
+          'The AI service is temporarily unavailable. Please try again.',
+          502,
+          'AI_UNAVAILABLE'
+        );
     }
-    if (msg.includes('quota') || msg.includes('rate') || msg.includes('429')) {
-      throw new AppError('AI service is temporarily rate-limited after multiple attempts. Please try again later.', 429);
-    }
-    if (msg.includes('503') || msg.includes('service unavailable')) {
-      throw new AppError('AI service is temporarily unavailable due to high demand. Please try again later.', 503);
-    }
-    throw new AppError('The AI service is temporarily unavailable. Please try again.', 502);
   }
 
   // 5. Build source citations (defensive — a malformed chunk must never 500)

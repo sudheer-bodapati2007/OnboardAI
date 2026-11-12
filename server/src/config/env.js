@@ -37,6 +37,7 @@ export const env = {
   // AI provider
   geminiApiKey: process.env.GEMINI_API_KEY ?? null,
   geminiChatModel: process.env.GEMINI_CHAT_MODEL ?? 'gemini-3.8-flash',
+  geminiFallbackModel: process.env.GEMINI_FALLBACK_MODEL ?? null,
   geminiEmbedModel: process.env.GEMINI_EMBED_MODEL ?? 'gemini-embedding-001',
 
   // Gemini request reliability

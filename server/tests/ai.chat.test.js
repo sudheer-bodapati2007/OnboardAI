@@ -18,8 +18,8 @@ const impls = {
 
 class FakeGenAI {
   constructor() {}
-  getGenerativeModel() {
-    return { generateContent: (prompt) => impls.generateContent(prompt) };
+  getGenerativeModel({ model } = {}) {
+    return { generateContent: (prompt) => impls.generateContent(prompt, model) };
   }
 }
 
@@ -78,13 +78,13 @@ describe('answerQuestion', () => {
     impls.generateContent = async () => {
       throw new Error('503 Service Unavailable: This model is currently experiencing high demand.');
     };
-    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 503, 'temporarily unavailable due to high demand');
+    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 503, 'overloaded due to high demand');
     impls.generateContent = async () => ({ response: { text: () => 'ok' } });
   });
 
   it('throws 429 on quota exhaustion', async () => {
     impls.generateContent = async () => { throw new Error('429 Quota exceeded for model'); };
-    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 429, 'rate-limited');
+    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 429, 'rate limit');
     impls.generateContent = async () => ({ response: { text: () => 'ok' } });
   });
 
@@ -92,13 +92,13 @@ describe('answerQuestion', () => {
     impls.generateContent = async () => {
       throw new Error('429 Rate limited. retry_after: 5');
     };
-    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 429, 'rate-limited');
+    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 429, 'rate limit');
     impls.generateContent = async () => ({ response: { text: () => 'ok' } });
   });
 
   it('throws 502 for invalid API key (non-retryable)', async () => {
     impls.generateContent = async () => { throw new Error('API key invalid'); };
-    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 502, 'temporarily unavailable');
+    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 502, 'API key');
     impls.generateContent = async () => ({ response: { text: () => 'ok' } });
   });
 
@@ -110,7 +110,7 @@ describe('answerQuestion', () => {
 
   it('throws 504 on request timeout', async () => {
     impls.generateContent = async () => { throw new Error('ETIMEDOUT'); };
-    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 504, 'timed out');
+    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 504, 'took too long');
     impls.generateContent = async () => ({ response: { text: () => 'ok' } });
   });
 
@@ -233,6 +233,157 @@ describe('answerQuestion', () => {
       503,
       'Could not read the policy documents'
     );
+    impls.retrieveRelevantChunks = async () => [];
+  });
+});
+
+describe('answerQuestion — model fallback', () => {
+  const PRIMARY = 'gemini-3.8-flash';
+  const FALLBACK = 'gemini-3.5-flash-lite';
+  const FALLBACK_ENV = { geminiFallbackModel: FALLBACK };
+
+  function enableFallback() {
+    envMock.geminiFallbackModel = FALLBACK;
+  }
+  function disableFallback() {
+    envMock.geminiFallbackModel = undefined;
+  }
+
+  it('uses only the primary model when no fallback is configured', async () => {
+    let calls = 0;
+    const models = [];
+    impls.generateContent = async (prompt, model) => {
+      calls++;
+      models.push(model);
+      throw new Error('503 Service Unavailable: The model is overloaded.');
+    };
+    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 503, 'overloaded');
+    assert.equal(calls, 3, 'only primary attempts (1 + GEMINI_MAX_RETRIES)');
+    assert.deepEqual(models, [PRIMARY, PRIMARY, PRIMARY]);
+  });
+
+  it('falls back to the fallback model after the primary keeps returning 503', async () => {
+    enableFallback();
+    let calls = 0;
+    const models = [];
+    impls.generateContent = async (prompt, model) => {
+      calls++;
+      models.push(model);
+      if (model === PRIMARY) {
+        throw new Error('503 Service Unavailable: This model is currently experiencing high demand.');
+      }
+      return { response: { text: () => 'Answer from fallback model' } };
+    };
+
+    const result = await answerQuestion('org1', 'hello', aiDeps);
+
+    assert.equal(result.answer, 'Answer from fallback model');
+    assert.deepEqual(models, [PRIMARY, PRIMARY, PRIMARY, FALLBACK]);
+    disableFallback();
+    impls.generateContent = async () => ({ response: { text: () => 'ok' } });
+  });
+
+  it('falls back after the primary generation times out', async () => {
+    enableFallback();
+    const models = [];
+    impls.generateContent = async (prompt, model) => {
+      models.push(model);
+      if (model === PRIMARY) throw new Error('generateContent timed out');
+      return { response: { text: () => 'Fallback after timeout' } };
+    };
+
+    const result = await answerQuestion('org1', 'hello', aiDeps);
+
+    assert.equal(result.answer, 'Fallback after timeout');
+    assert.equal(models[models.length - 1], FALLBACK);
+    disableFallback();
+    impls.generateContent = async () => ({ response: { text: () => 'ok' } });
+  });
+
+  it('falls back on an actual 429 quota error and succeeds from the separate pool', async () => {
+    enableFallback();
+    const models = [];
+    impls.generateContent = async (prompt, model) => {
+      models.push(model);
+      if (model === PRIMARY) {
+        throw new Error('429 Too Many Requests: Resource has been exhausted (e.g. check quota).');
+      }
+      return { response: { text: () => 'Answer from fallback quota pool' } };
+    };
+
+    const result = await answerQuestion('org1', 'hello', aiDeps);
+
+    assert.equal(result.answer, 'Answer from fallback quota pool');
+    assert.equal(models[models.length - 1], FALLBACK);
+    disableFallback();
+    impls.generateContent = async () => ({ response: { text: () => 'ok' } });
+  });
+
+  it('throws 429 when both models fail with quota errors', async () => {
+    enableFallback();
+    impls.generateContent = async () => {
+      throw new Error('429 Too Many Requests: Resource has been exhausted (e.g. check quota).');
+    };
+    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 429, 'rate limit');
+    disableFallback();
+    impls.generateContent = async () => ({ response: { text: () => 'ok' } });
+  });
+
+  it('does not fall back on an invalid API key (permanent for every model)', async () => {
+    enableFallback();
+    let calls = 0;
+    const models = [];
+    impls.generateContent = async (prompt, model) => {
+      calls++;
+      models.push(model);
+      throw new Error('API key not valid. Please pass a valid API key.');
+    };
+    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 502, 'API key');
+    assert.equal(calls, 1, 'auth errors must not be retried or fall back');
+    assert.deepEqual(models, [PRIMARY]);
+    disableFallback();
+    impls.generateContent = async () => ({ response: { text: () => 'ok' } });
+  });
+
+  it('sends identical prompts (evidence + system instruction) to both models', async () => {
+    enableFallback();
+    impls.retrieveRelevantChunks = async () => [
+      {
+        documentName: 'Leave Policy.pdf',
+        pageNumber: 3,
+        text: 'Each eligible full-time employee receives 18 days of paid annual leave.',
+        score: 0.9,
+      },
+    ];
+    const prompts = [];
+    impls.generateContent = async (prompt, model) => {
+      prompts.push({ model, prompt });
+      if (model === PRIMARY) {
+        throw new Error('503 Service Unavailable: The model is overloaded.');
+      }
+      return { response: { text: () => '18 days of paid annual leave.' } };
+    };
+
+    const result = await answerQuestion('org1', 'How many leave days?', aiDeps);
+
+    assert.equal(result.answer, '18 days of paid annual leave.');
+    assert.equal(result.sources.length, 1);
+    assert.equal(result.sources[0].documentName, 'Leave Policy.pdf');
+    assert.equal(result.sources[0].pageNumber, 3);
+    assert.equal(result.insufficient, false);
+    // Primary retries exhausted (1 + GEMINI_MAX_RETRIES attempts), then one
+    // fallback attempt — all with the identical prompt.
+    assert.equal(prompts.length, 4);
+    assert.deepEqual(
+      prompts.map((p) => p.model),
+      [PRIMARY, PRIMARY, PRIMARY, FALLBACK]
+    );
+    assert.equal(prompts[0].prompt, prompts[3].prompt);
+    assert.match(prompts[0].prompt, /<evidence>/);
+    assert.match(prompts[0].prompt, /18 days of paid annual leave/);
+    assert.match(prompts[0].prompt, /Question: How many leave days\?/);
+    disableFallback();
+    impls.generateContent = async () => ({ response: { text: () => 'ok' } });
     impls.retrieveRelevantChunks = async () => [];
   });
 });

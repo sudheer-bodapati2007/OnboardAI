@@ -119,7 +119,20 @@ export default function AIChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const errorForStatus = (status, message, code = null) => {
+  const errorForStatus = (status, message, code = null, rawCode = null) => {
+    // Backend-provided AI error codes are the most precise signal.
+    if (rawCode === 'AI_QUOTA') {
+      return 'The AI quota or rate limit has been reached. Please wait a bit and try again.';
+    }
+    if (rawCode === 'AI_OVERLOADED') {
+      return 'The Gemini service is temporarily overloaded. Please try again in a moment.';
+    }
+    if (rawCode === 'AI_TIMEOUT') {
+      return 'AI generation took too long. Please try again.';
+    }
+    if (rawCode === 'AI_AUTH' || rawCode === 'AI_MODEL') {
+      return 'The AI service is misconfigured. Ask your administrator to check the API key or model settings.';
+    }
     // Transport-level failures (axios sets `code`, no HTTP status):
     if (code === 'ECONNABORTED' || /timeout of \d+ms/i.test(message ?? '')) {
       return 'The AI service took too long to respond. Please try again.';
@@ -196,7 +209,7 @@ export default function AIChatPage() {
       ]);
     } catch (err) {
       const status = err?.status;
-      const errMsg = errorForStatus(status, err?.message, err?.code);
+      const errMsg = errorForStatus(status, err?.message, err?.code, err?.raw?.code);
 
       setMessages((prev) => [
         ...prev,
