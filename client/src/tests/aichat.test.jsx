@@ -112,8 +112,7 @@ describe('AIChatPage — failed requests (blank-page regression)', () => {
     expect(screen.getByPlaceholderText(/Ask about company policies/i)).not.toBeDisabled();
   });
 
-  it('Retry re-sends the last question and renders the new answer', async () => {
-    chatImpl
+  it('Retry re-sends the last question and renders the new answer', async () => {    chatImpl
       .mockRejectedValueOnce({ status: 503, message: 'Service Unavailable' })
       .mockResolvedValueOnce({ data: { answer: ANSWER, sources: [], insufficient: false } });
 
@@ -129,5 +128,40 @@ describe('AIChatPage — failed requests (blank-page regression)', () => {
     expect(aiApi.chat).toHaveBeenCalledTimes(2);
     // The retry sent the ORIGINAL question (input was cleared after sending)
     expect(aiApi.chat).toHaveBeenLastCalledWith(QUESTION, expect.anything());
+  });
+
+  it('shows a friendly message (not a raw axios timeout) when the request times out', async () => {
+    // axios aborts with code ECONNABORTED and message "timeout of Nms exceeded"
+    chatImpl.mockRejectedValue({
+      code: 'ECONNABORTED',
+      status: undefined,
+      message: 'timeout of 90000ms exceeded',
+    });
+
+    render(<AIChatPage />);
+    typeAndSend();
+
+    await waitFor(() =>
+      expect(screen.getByText(/took too long to respond/i)).toBeInTheDocument()
+    );
+    // Page stays rendered with a working Retry button
+    expect(screen.getByText('Retry')).toBeInTheDocument();
+    expect(screen.getByText('AI Policy Assistant')).toBeInTheDocument();
+  });
+
+  it('shows a friendly message when the backend is unreachable (Network Error)', async () => {
+    chatImpl.mockRejectedValue({
+      code: 'ERR_NETWORK',
+      status: undefined,
+      message: 'Network Error',
+    });
+
+    render(<AIChatPage />);
+    typeAndSend();
+
+    await waitFor(() =>
+      expect(screen.getByText(/could not reach the AI service/i)).toBeInTheDocument()
+    );
+    expect(screen.getByText('Retry')).toBeInTheDocument();
   });
 });

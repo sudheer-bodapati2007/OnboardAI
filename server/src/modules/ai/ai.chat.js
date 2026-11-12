@@ -166,9 +166,14 @@ export async function answerQuestion(organizationId, question, {
   const queryEmbedding = await eq(question);
 
   // 2. Retrieve relevant chunks (org-scoped, ready docs only)
-  const chunks = queryEmbedding
-    ? await rc(organizationId, queryEmbedding)
-    : [];
+  let chunks;
+  try {
+    chunks = queryEmbedding ? await rc(organizationId, queryEmbedding) : [];
+  } catch (err) {
+    // A database failure must surface as an operational error, not a raw 500.
+    console.error('[AI Chat] Policy retrieval failed:', err?.message ?? err);
+    throw new AppError('Could not read the policy documents. Please try again shortly.', 503);
+  }
 
   const insufficient = chunks.length === 0;
 
@@ -177,10 +182,19 @@ export async function answerQuestion(organizationId, question, {
   const userPrompt = `${evidenceBlock}\n\nQuestion: ${question}`;
 
   // 4. Call Gemini with bounded retries for transient failures
+  // A wall-clock budget caps total generation time so the server always
+  // responds within the hosting proxy's request window (Render ~100s).
+  const totalBudgetMs = e.geminiTotalTimeoutMs ?? 55000;
+  const startedAt = Date.now();
   let answer;
   let lastErr;
   let emptyResponse = false;
   for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
+    // Never start another attempt if the request already exhausted its budget.
+    if (attempt > 0 && Date.now() - startedAt >= totalBudgetMs) {
+      console.error('[AI Chat] Total time budget exhausted before retry.');
+      break;
+    }
     try {
       const genAI = new GenAI(e.geminiApiKey);
       const model = genAI.getGenerativeModel({
@@ -231,9 +245,14 @@ export async function answerQuestion(organizationId, question, {
         break;
       }
 
-      // Respect Retry-After when the provider tells us how long to wait.
+      // Respect Retry-After when the provider tells us how long to wait,
+      // but never wait past the total request budget.
       const ra = retryAfterMs(err);
       const delay = ra ?? backoffMs(attempt);
+      if (Date.now() - startedAt + delay >= totalBudgetMs) {
+        console.error('[AI Chat] Backoff would exceed total time budget; giving up.');
+        break;
+      }
       await sleep(delay);
     }
   }

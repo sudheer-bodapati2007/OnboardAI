@@ -119,7 +119,14 @@ export default function AIChatPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
 
-  const errorForStatus = (status, message) => {
+  const errorForStatus = (status, message, code = null) => {
+    // Transport-level failures (axios sets `code`, no HTTP status):
+    if (code === 'ECONNABORTED' || /timeout of \d+ms/i.test(message ?? '')) {
+      return 'The AI service took too long to respond. Please try again.';
+    }
+    if (code === 'ERR_NETWORK') {
+      return 'Could not reach the AI service. It may be waking up from idle — please retry in a moment.';
+    }
     if (status === 503) {
       // Distinguish missing API key configuration from service unavailable.
       const lowerMsg = (message ?? '').toLowerCase();
@@ -189,7 +196,7 @@ export default function AIChatPage() {
       ]);
     } catch (err) {
       const status = err?.status;
-      const errMsg = errorForStatus(status, err?.message);
+      const errMsg = errorForStatus(status, err?.message, err?.code);
 
       setMessages((prev) => [
         ...prev,

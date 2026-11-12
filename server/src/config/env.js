@@ -43,6 +43,10 @@ export const env = {
   geminiRequestTimeoutMs: parseInt(process.env.GEMINI_REQUEST_TIMEOUT_MS ?? '30000', 10),
   geminiEmbedTimeoutMs: parseInt(process.env.GEMINI_EMBED_TIMEOUT_MS ?? '8000', 10),
   geminiMaxRetries: parseInt(process.env.GEMINI_MAX_RETRIES ?? '2', 10),
+  // Wall-clock budget for the whole chat retry loop (prompt generation).
+  // Must stay below the hosting proxy's request timeout (Render: ~100s) so the
+  // server always answers instead of the proxy dropping the connection.
+  geminiTotalTimeoutMs: parseInt(process.env.GEMINI_TOTAL_TIMEOUT_MS ?? '55000', 10),
 
   // Storage
   storageProvider: process.env.STORAGE_PROVIDER ?? 'local',

@@ -11,6 +11,48 @@ const api = axios.create({
   timeout: 15000,
 });
 
+// ─── Long-running requests ───────────────────────────────────────────────────
+// AI chat can legitimately take 30–90s: the backend embeds the question,
+// retrieves policy chunks, then calls a reasoning model (gemini-3.8-flash)
+// with bounded retries. The global 15s timeout aborted those requests
+// ("timeout of 15000ms exceeded") while Gemini was still generating.
+// 90s covers the backend's worst case (GEMINI_TOTAL_TIMEOUT_MS=55s budget +
+// one 30s in-flight attempt) and stays under the Render proxy limit (~100s).
+export const AI_TIMEOUT_MS = 90000;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Statuses worth retrying at the transport level. Authentication (401/403),
+// validation (400/404/422) and other permanent errors are never retried.
+const TRANSIENT_STATUS = new Set([429, 502, 503, 504]);
+
+/**
+ * Retry a request once with backoff for transient failures:
+ * network errors, timeouts (no response) and 429/502/503/504.
+ *
+ * A slow first attempt is NOT auto-retried (it would double the user's wait);
+ * those get the visible Retry button instead. Duplicate submissions while a
+ * request is in flight are prevented in AIChatPage via its `loading` guard.
+ */
+export async function withTransientRetry(requestFn, {
+  retries = 1,
+  delayMs = 2000,
+  fastRetryWindowMs = 30000,
+} = {}) {
+  const startedAt = Date.now();
+  try {
+    return await requestFn();
+  } catch (err) {
+    const status = err?.status;
+    const transient = !status || TRANSIENT_STATUS.has(status);
+    const wasFast = Date.now() - startedAt < fastRetryWindowMs;
+    if (!transient || retries <= 0 || !wasFast) throw err;
+    console.warn(`[api] Transient failure (status ${status ?? 'none'}); retrying in ${delayMs}ms`);
+    await sleep(delayMs);
+    return withTransientRetry(requestFn, { retries: retries - 1, delayMs, fastRetryWindowMs });
+  }
+}
+
 // Response interceptor — unwrap data or normalise errors
 api.interceptors.response.use(
   (response) => response.data,
@@ -21,13 +63,14 @@ api.interceptors.response.use(
       'An unexpected error occurred';
 
     const status = error.response?.status;
+    const code = error.code ?? null; // ECONNABORTED (timeout), ERR_NETWORK, …
 
     // Redirect to login on 401 (except the /auth/me check itself)
     if (status === 401 && !error.config.url?.includes('/auth/me')) {
       window.location.href = '/login';
     }
 
-    return Promise.reject({ message, status, raw: error.response?.data?.error });
+    return Promise.reject({ message, status, code, raw: error.response?.data?.error });
   }
 );
 
@@ -78,14 +121,23 @@ export const notificationsApi = {
 // ─── Policies ─────────────────────────────────────────────────────────────────
 export const policiesApi = {
   list: () => api.get('/policies'),
+  // Upload responds fast (processing is async server-side), but large PDFs on
+  // slow connections can exceed the global 15s during transfer alone.
   upload: (formData) =>
-    api.post('/policies', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
+    api.post('/policies', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000,
+    }),
   delete: (id) => api.delete(`/policies/${id}`),
 };
 
 // ─── AI ───────────────────────────────────────────────────────────────────────
 export const aiApi = {
-  chat: (question, history = []) => api.post('/ai/chat', { question, history }),
+  chat: (question, history = []) =>
+    withTransientRetry(
+      () => api.post('/ai/chat', { question, history }, { timeout: AI_TIMEOUT_MS }),
+      { retries: 1, delayMs: 2000 }
+    ),
 };
 
 export default api;

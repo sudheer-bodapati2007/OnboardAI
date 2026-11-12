@@ -195,4 +195,44 @@ describe('answerQuestion', () => {
     assert.equal(calls, 1, 'empty responses should not be retried');
     impls.generateContent = async () => ({ response: { text: () => 'ok' } });
   });
+
+  it('stops retrying once the total time budget is exhausted (single call)', async () => {
+    envMock.geminiTotalTimeoutMs = 0; // no budget for any retry
+    let calls = 0;
+    impls.generateContent = async () => {
+      calls++;
+      throw new Error('503 Service Unavailable: This model is currently experiencing high demand.');
+    };
+    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 503, 'rate-limited|high demand|temporarily');
+    assert.equal(calls, 1, 'a zero budget must not allow any retry');
+    envMock.geminiTotalTimeoutMs = undefined;
+    impls.generateContent = async () => ({ response: { text: () => 'ok' } });
+  });
+
+  it('allows retries within the budget and succeeds', async () => {
+    envMock.geminiTotalTimeoutMs = 30000;
+    let calls = 0;
+    impls.generateContent = async () => {
+      calls++;
+      if (calls === 1) throw new Error('503 Service Unavailable: This model is currently experiencing high demand.');
+      return { response: { text: () => 'Answer within budget' } };
+    };
+    const result = await answerQuestion('org1', 'hello', aiDeps);
+    assert.equal(result.answer, 'Answer within budget');
+    assert.equal(calls, 2);
+    envMock.geminiTotalTimeoutMs = undefined;
+    impls.generateContent = async () => ({ response: { text: () => 'ok' } });
+  });
+
+  it('maps MongoDB retrieval failures to an operational 503', async () => {
+    impls.retrieveRelevantChunks = async () => {
+      throw new Error('MongoServerError: connection 2 destroyed');
+    };
+    await expectAppError(
+      answerQuestion('org1', 'hello', aiDeps),
+      503,
+      'Could not read the policy documents'
+    );
+    impls.retrieveRelevantChunks = async () => [];
+  });
 });
