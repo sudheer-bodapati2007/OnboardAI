@@ -8,6 +8,7 @@ import { PageLoading } from '../components/ui/LoadingSpinner.jsx';
 import { ErrorMessage } from '../components/ui/ErrorMessage.jsx';
 import { EmptyState } from '../components/ui/EmptyState.jsx';
 import { Pagination } from '../components/ui/Pagination.jsx';
+import { useSocketEvent, useRealtimeReconnect } from '../contexts/RealtimeContext.jsx';
 
 const DEPARTMENTS = ['Engineering', 'HR', 'Sales', 'Marketing', 'Finance', 'Operations'];
 const STATUSES = ['active', 'onboarding', 'inactive'];
@@ -29,9 +30,11 @@ export default function EmployeesPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const fetchEmployees = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchEmployees = useCallback(async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await employeesApi.list({
         page,
@@ -42,14 +45,28 @@ export default function EmployeesPage() {
       });
       setEmployees(res.data.employees);
       setMeta(res.meta);
+      if (!silent) setError(null);
     } catch (err) {
-      setError(err.message);
+      if (!silent) setError(err.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [page, debouncedSearch, department, status]);
 
   useEffect(() => { fetchEmployees(); }, [fetchEmployees]);
+
+  // Real-time: profile edits are patched into the visible rows in place —
+  // no fetch, no flicker. New employees trigger one silent refetch so
+  // pagination counts stay accurate.
+  useSocketEvent('employee:updated', (payload) => {
+    const updated = payload?.employee;
+    if (!updated?._id) return;
+    setEmployees((prev) =>
+      prev.map((e) => (e._id === updated._id ? { ...e, ...updated } : e))
+    );
+  });
+  useSocketEvent('employee:created', () => fetchEmployees(true));
+  useRealtimeReconnect(() => fetchEmployees(true));
 
   // Reset page on filter change
   useEffect(() => { setPage(1); }, [debouncedSearch, department, status]);

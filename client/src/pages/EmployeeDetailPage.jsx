@@ -12,6 +12,7 @@ import { Modal } from '../components/ui/Modal.jsx';
 import { PageLoading } from '../components/ui/LoadingSpinner.jsx';
 import { ErrorMessage } from '../components/ui/ErrorMessage.jsx';
 import { EmptyState } from '../components/ui/EmptyState.jsx';
+import { useSocketEvent, useRealtimeReconnect } from '../contexts/RealtimeContext.jsx';
 
 export default function EmployeeDetailPage() {
   const { id } = useParams();
@@ -27,9 +28,13 @@ export default function EmployeeDetailPage() {
   const [onboardingError, setOnboardingError] = useState(null);
   const [statusUpdating, setStatusUpdating] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchData = useCallback(async (silent = false) => {
+    // Silent refetches (real-time events, reconnect) update the data in place
+    // instead of replacing the whole page with a spinner.
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const [empRes, tasksRes, templatesRes] = await Promise.all([
         employeesApi.get(id),
@@ -40,19 +45,27 @@ export default function EmployeeDetailPage() {
       setTasks(tasksRes.data.tasks ?? []);
       setTemplates(templatesRes.data.templates ?? []);
     } catch (err) {
-      setError(err.message);
+      if (!silent) setError(err.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Poll every 30s so task status changes appear without manual refresh
-  useEffect(() => {
-    const interval = setInterval(fetchData, 30_000);
-    return () => clearInterval(interval);
-  }, [fetchData]);
+  // Real-time updates — targeted, silent, and filtered to the viewed employee.
+  // HR-only page: task events arrive on the `hr:<orgId>` room.
+  useSocketEvent('task:created', (payload) => {
+    if (payload?.employeeId === id) fetchData(true);
+  });
+  useSocketEvent('task:updated', (payload) => {
+    if (payload?.employeeId === id) fetchData(true);
+  });
+  // Profile edits are pushed with the full sanitised employee — patch in place.
+  useSocketEvent('employee:updated', (payload) => {
+    if (payload?.employee?._id === id) setEmployee(payload.employee);
+  });
+  useRealtimeReconnect(() => fetchData(true));
 
   const completedCount = tasks.filter((t) => t.status === 'completed').length;
   const completionPct = tasks.length > 0 ? Math.round((completedCount / tasks.length) * 100) : 0;

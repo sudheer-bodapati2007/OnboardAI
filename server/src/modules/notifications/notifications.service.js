@@ -1,11 +1,17 @@
 // src/modules/notifications/notifications.service.js
 import { Notification } from '../../models/Notification.js';
 import { AppError } from '../../utils/AppError.js';
+import { emitToUser, sanitizeNotification } from '../../realtime/socket.js';
 
 /**
  * Create a notification for a specific user.
  * Idempotent — skips if an identical unread notification already exists
  * (same type + relatedEmployee/Task) created in the last 60 seconds.
+ *
+ * The notification is ALWAYS persisted first (Mongo = source of truth).
+ * Only after a successful insert is a `notification:new` socket event emitted,
+ * and it goes exclusively to the recipient's private `user:<userId>` room —
+ * never to the organisation or HR rooms.
  */
 export async function createNotification({
   organizationId,
@@ -26,9 +32,10 @@ export async function createNotification({
     isRead: false,
     createdAt: { $gte: new Date(Date.now() - 60_000) },
   });
+  // Duplicate — persist nothing and emit nothing (prevents double toasts)
   if (recent) return recent;
 
-  return Notification.create({
+  const notification = await Notification.create({
     organizationId,
     userId,
     type,
@@ -38,6 +45,14 @@ export async function createNotification({
     relatedTaskId,
     relatedPolicyId,
   });
+
+  // Real-time delivery to the recipient only, after persistence succeeded.
+  // Fire-and-forget: delivery failure must never fail the caller's request.
+  emitToUser(userId, 'notification:new', {
+    notification: sanitizeNotification(notification),
+  });
+
+  return notification;
 }
 
 /**

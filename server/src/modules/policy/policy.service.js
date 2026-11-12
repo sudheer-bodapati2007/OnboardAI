@@ -7,6 +7,7 @@ import { AppError } from '../../utils/AppError.js';
 import { processDocument } from './policy.processor.js';
 import { env } from '../../config/env.js';
 import { createNotification } from '../notifications/notifications.service.js';
+import { emitToHr } from '../../realtime/socket.js';
 
 /**
  * Upload a PDF and kick off async processing.
@@ -34,6 +35,17 @@ export async function uploadPolicy(organizationId, uploadedBy, { buffer, origina
   processDocument(doc._id.toString())
     .then(async (updatedDoc) => {
       if (!updatedDoc) return;
+
+      // Real-time: push the terminal status to HR admins so the policies page
+      // can refresh immediately instead of polling every few seconds.
+      emitToHr(organizationId, 'policy:updated', {
+        documentId: String(updatedDoc._id),
+        status: updatedDoc.status,
+        pageCount: updatedDoc.pageCount ?? null,
+        chunkCount: updatedDoc.chunkCount ?? null,
+        errorMessage: updatedDoc.status === 'failed' ? (updatedDoc.errorMessage ?? '') : undefined,
+      });
+
       // Notify the uploader when processing finishes
       const type = updatedDoc.status === 'ready' ? 'policy_ready' : 'policy_failed';
       const title =

@@ -12,6 +12,7 @@ import { PageLoading } from '../components/ui/LoadingSpinner.jsx';
 import { ErrorMessage } from '../components/ui/ErrorMessage.jsx';
 import { EmptyState } from '../components/ui/EmptyState.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { useSocketEvent, useRealtimeReconnect } from '../contexts/RealtimeContext.jsx';
 
 export default function MyOnboardingPage() {
   const { user } = useAuth();
@@ -23,30 +24,52 @@ export default function MyOnboardingPage() {
   const [taskErrors, setTaskErrors] = useState({}); // { [taskId]: errorMessage }
   const [expandedCategories, setExpandedCategories] = useState({});
 
-  const fetchTasks = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchTasks = useCallback(async (silent = false, { resetExpansion = false } = {}) => {
+    // Silent refetches (real-time events, reconnect) never flip the page into
+    // a loading spinner and never reset the expanded/collapsed sections —
+    // except on a first-plan arrival, where defaults are applied explicitly.
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await onboardingApi.getMyTasks();
       setEmployee(res.data.employee);
       setTasks(res.data.tasks ?? []);
-      // Expand all categories by default
-      const cats = [...new Set((res.data.tasks ?? []).map((t) => t.category))];
-      setExpandedCategories(Object.fromEntries(cats.map((c) => [c, true])));
+      if (!silent || resetExpansion) {
+        // Expand all categories by default
+        const cats = [...new Set((res.data.tasks ?? []).map((t) => t.category))];
+        setExpandedCategories(Object.fromEntries(cats.map((c) => [c, true])));
+      }
     } catch (err) {
-      setError(err.message);
+      if (!silent) setError(err.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { fetchTasks(); }, [fetchTasks]);
 
-  // Poll every 30s so newly assigned tasks appear without manual refresh
-  useEffect(() => {
-    const interval = setInterval(fetchTasks, 30_000);
-    return () => clearInterval(interval);
-  }, [fetchTasks]);
+  // Real-time: events arrive on this employee's private `user:<id>` room.
+  // New tasks appear instantly — including the "no plan yet" → "plan ready"
+  // transition, which also applies the default section expansion.
+  useSocketEvent('task:created', () => fetchTasks(true, { resetExpansion: !employee }));
+  // Status changes merge locally — no fetch, no spinner, no layout shift.
+  useSocketEvent('task:updated', (payload) => {
+    const updated = payload?.task;
+    if (!updated) return;
+    setTasks((prev) => {
+      const exists = prev.some((t) => t._id === updated._id);
+      if (!exists) {
+        // Missed the created event (e.g. while offline) — pull persisted state.
+        fetchTasks(true);
+        return prev;
+      }
+      return prev.map((t) => (t._id === updated._id ? { ...t, ...updated } : t));
+    });
+  });
+  // Reconnect: pull latest persisted state once (tasks may have changed offline).
+  useRealtimeReconnect(() => fetchTasks(true));
 
   async function setTaskStatus(task, newStatus) {
     if (updatingTask === task._id) return; // prevent duplicate clicks

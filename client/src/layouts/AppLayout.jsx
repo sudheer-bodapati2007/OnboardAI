@@ -36,7 +36,7 @@ const EMPLOYEE_NAV = [
 ];
 
 export function AppLayout() {
-  const { user, logout, isHrAdmin } = useAuth();
+  const { user, logout, refreshUser, isHrAdmin } = useAuth();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -61,7 +61,8 @@ export function AppLayout() {
 
     try {
       await employeesApi.uploadProfileImage(formData);
-      window.location.reload();
+      // Update the avatar in place — no full browser reload.
+      await refreshUser();
     } catch (err) {
       setImageError(err.message ?? 'Failed to upload profile image');
     } finally {

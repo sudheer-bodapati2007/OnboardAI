@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Bell, Check, CheckCheck, Inbox } from 'lucide-react';
 import { notificationsApi } from '../services/api.js';
+import { useSocketEvent, useRealtimeReconnect } from '../contexts/RealtimeContext.jsx';
 
 const TYPE_COLORS = {
   onboarding_assigned: 'bg-blue-500',
@@ -30,21 +31,41 @@ export function NotificationDrawer() {
   const [loading, setLoading]     = useState(false);
   const drawerRef                 = useRef(null);
 
+  // Initial load. After that, the bell stays live via socket events —
+  // no polling. The button also refetches on open (user-triggered).
+  const knownIdsRef = useRef(new Set());
+
   const fetchNotifications = useCallback(async () => {
     try {
       const res = await notificationsApi.list({ limit: 30 });
-      setItems(res.data?.notifications ?? []);
+      const list = res.data?.notifications ?? [];
+      setItems(list);
       setUnread(res.data?.unreadCount ?? 0);
+      // Rebuild the dedupe index from the authoritative server list.
+      knownIdsRef.current = new Set(list.map((n) => n._id));
     } catch {
       // silently ignore — bell count just stays stale
     }
   }, []);
 
-  // Initial load + periodic refresh every 60s
+  // Real-time: the backend emits `notification:new` ONLY to the recipient's
+  // private user room. A known-IDs index guarantees a duplicate delivery
+  // never creates a second row or a second unread increment.
+  useSocketEvent('notification:new', (payload) => {
+    const n = payload?.notification;
+    if (!n?._id || knownIdsRef.current.has(n._id)) return;
+    knownIdsRef.current.add(n._id);
+    setItems((prev) => [n, ...prev]);
+    if (!n.isRead) setUnread((c) => c + 1);
+  });
+
+  // Reconnect: pull the authoritative list once — anything that happened
+  // while disconnected is covered by Mongo, not by events.
+  useRealtimeReconnect(fetchNotifications);
+
+  // Initial load (after all hooks are declared).
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, 60_000);
-    return () => clearInterval(interval);
   }, [fetchNotifications]);
 
   // Close on outside click

@@ -5,6 +5,12 @@ import { Employee } from '../../models/Employee.js';
 import { User } from '../../models/User.js';
 import { AppError } from '../../utils/AppError.js';
 import { createNotification } from '../notifications/notifications.service.js';
+import {
+  emitToUser,
+  emitToOrg,
+  emitToHr,
+  sanitizeTask,
+} from '../../realtime/socket.js';
 
 // ─── Templates ───────────────────────────────────────────────────────────────
 
@@ -79,6 +85,27 @@ export async function startOnboarding(organizationId, employeeId, templateId) {
 
   const tasks = await OnboardingTask.insertMany(taskDocs);
 
+  // ── Real-time events (after persistence — Mongo stays the source of truth) ──
+  const payloadTasks = tasks.map(sanitizeTask);
+
+  // The employee's private channel: full task details for their own plan.
+  if (employee.userId) {
+    emitToUser(employee.userId, 'task:created', {
+      employeeId: String(employee._id),
+      tasks: payloadTasks,
+    });
+  }
+
+  // HR admins of the org: they manage the employee's plan.
+  emitToHr(organizationId, 'task:created', {
+    employeeId: String(employee._id),
+    employeeName: employee.fullName,
+    tasks: payloadTasks,
+  });
+
+  // Whole org (dashboards, activity): lean signal only — no task payloads.
+  emitToOrg(organizationId, 'dashboard:update', { reason: 'task_created' });
+
   // Notify the employee's linked user account (fire-and-forget — never throws)
   if (employee.userId) {
     createNotification({
@@ -148,10 +175,33 @@ export async function updateTaskStatus(organizationId, taskId, status, requestin
   task.completedAt = status === 'completed' ? new Date() : null;
   await task.save();
 
+  // ── Real-time events (after persistence succeeded) ──────────────────────────
+  const taskPayload = sanitizeTask(task);
+
+  // The employee who owns the task (and the acting user if they are the owner).
+  // The owner's userId is resolved server-side from the Employee record —
+  // never from the request body.
+  const owner = await Employee.findById(task.employeeId).select('userId fullName').lean();
+
+  if (owner?.userId) {
+    emitToUser(owner.userId, 'task:updated', { task: taskPayload });
+  }
+
+  // HR admins: full authorised view, with the employee's name for context.
+  emitToHr(organizationId, 'task:updated', {
+    task: taskPayload,
+    employeeId: String(task.employeeId),
+    employeeName: owner?.fullName ?? 'An employee',
+  });
+
+  // Whole org: lean dashboard signal.
+  emitToOrg(organizationId, 'dashboard:update', {
+    reason: status === 'completed' ? 'task_completed' : 'task_updated',
+  });
+
   // Notify on task completion (fire-and-forget)
   if (status === 'completed') {
-    const employee = await Employee.findById(task.employeeId).lean();
-    const employeeName = employee?.fullName ?? 'An employee';
+    const employeeName = owner?.fullName ?? 'An employee';
 
     // Notify all HR admins in the same organisation (org-scoped, not the employee themselves)
     const hrAdmins = await User.find({
@@ -173,6 +223,28 @@ export async function updateTaskStatus(organizationId, taskId, status, requestin
     );
 
     await Promise.all(notificationPromises);
+
+    // Onboarding journey completed? (every task of this employee is done)
+    const [total, completed] = await Promise.all([
+      OnboardingTask.countDocuments({ employeeId: task.employeeId, organizationId }),
+      OnboardingTask.countDocuments({
+        employeeId: task.employeeId,
+        organizationId,
+        status: 'completed',
+      }),
+    ]);
+    if (total > 0 && total === completed) {
+      emitToOrg(organizationId, 'dashboard:update', { reason: 'onboarding_completed' });
+      emitToHr(organizationId, 'onboarding:completed', {
+        employeeId: String(task.employeeId),
+        employeeName,
+      });
+      if (owner?.userId) {
+        emitToUser(owner.userId, 'onboarding:completed', {
+          employeeId: String(task.employeeId),
+        });
+      }
+    }
   }
 
   return task.toObject();

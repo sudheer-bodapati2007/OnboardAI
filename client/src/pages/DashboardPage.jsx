@@ -11,6 +11,7 @@ import { onboardingApi } from '../services/api.js';
 import { PageLoading } from '../components/ui/LoadingSpinner.jsx';
 import { ErrorMessage } from '../components/ui/ErrorMessage.jsx';
 import { useAuth } from '../contexts/AuthContext.jsx';
+import { useSocketEvent, useRealtimeReconnect } from '../contexts/RealtimeContext.jsx';
 
 function StatCard({ icon: Icon, label, value, sub, color = 'navy' }) {
   const colors = {
@@ -43,26 +44,32 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  async function fetchOverview() {
-    setLoading(true);
-    setError(null);
+  async function fetchOverview(silent = false) {
+    // Silent refetches (real-time events, reconnect) update stats in place
+    // without flipping the page into a loading spinner.
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await onboardingApi.getOverview();
       setData(res.data);
+      if (!silent) setError(null);
     } catch (err) {
-      setError(err.message);
+      if (!silent) setError(err.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }
 
   useEffect(() => { fetchOverview(); }, []);
 
-  // Poll every 30s so dashboard stats update without manual refresh
-  useEffect(() => {
-    const interval = setInterval(fetchOverview, 30_000);
-    return () => clearInterval(interval);
-  }, [fetchOverview]);
+  // Real-time: the backend emits a lean `dashboard:update` signal (no payload)
+  // to the organisation room whenever a relevant persisted event occurs
+  // (employee created/updated/deactivated, task assigned, task completed,
+  // onboarding completed). We pull the fresh aggregate once per event.
+  useSocketEvent('dashboard:update', () => fetchOverview(true));
+  useRealtimeReconnect(() => fetchOverview(true));
 
   if (loading) return <PageLoading message="Loading dashboard…" />;
   if (error) return <ErrorMessage message={error} onRetry={fetchOverview} />;

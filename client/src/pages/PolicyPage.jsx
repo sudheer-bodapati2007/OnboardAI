@@ -8,6 +8,7 @@ import { EmptyState } from '../components/ui/EmptyState.jsx';
 import { ErrorMessage } from '../components/ui/ErrorMessage.jsx';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner.jsx';
 import { Modal } from '../components/ui/Modal.jsx';
+import { useSocketEvent, useRealtimeReconnect } from '../contexts/RealtimeContext.jsx';
 
 // Map policy status to Badge variant (existing variants: active, onboarding, inactive, pending, in_progress, completed)
 const STATUS_MAP = {
@@ -54,6 +55,13 @@ export default function PolicyPage() {
   }, []);
 
   useEffect(() => { fetchPolicies(); }, [fetchPolicies]);
+
+  // Real-time: the backend emits `policy:updated` (HR room) when background
+  // processing reaches a terminal state. This resolves the wait instantly;
+  // the short poll below remains only as a fallback for missed events while
+  // a document is still pending/processing.
+  useSocketEvent('policy:updated', () => fetchPolicies(true));
+  useRealtimeReconnect(() => fetchPolicies(true));
 
   // Poll every 5s while any doc is pending/processing
   useEffect(() => {

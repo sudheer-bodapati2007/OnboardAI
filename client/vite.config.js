@@ -10,7 +10,18 @@ export default defineConfig({
         target: 'http://localhost:5000',
         changeOrigin: true,
       },
+      // Socket.IO shares the backend origin (dev proxy keeps the cookie first-party)
+      '/socket.io': {
+        target: 'http://localhost:5000',
+        changeOrigin: true,
+        ws: true,
+      },
     },
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/tests/setup.js',
   },
   build: {
     outDir: 'dist',

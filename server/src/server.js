@@ -1,10 +1,12 @@
 // src/server.js
+import http from 'node:http';
 import { validateEnv } from './config/env.js';
 import { connectDB } from './config/database.js';
 import { configureDns } from './config/dns.js';
 import { recoverStuckProcessing } from './modules/policy/policy.processor.js';
 import app from './app.js';
 import { env } from './config/env.js';
+import { initRealtime, getIO } from './realtime/socket.js';
 
 // Validate env before anything else
 validateEnv();
@@ -21,14 +23,19 @@ async function start() {
     console.error('[Policy Processor] Startup recovery failed:', err.message);
   });
 
-  const server = app.listen(env.port, () => {
+  // Socket.IO shares the same HTTP server as Express (same port, same TLS).
+  const httpServer = http.createServer(app);
+  initRealtime(httpServer);
+
+  httpServer.listen(env.port, () => {
     console.log(`OnboardAI server running on port ${env.port} [${env.nodeEnv}]`);
   });
 
   // Graceful shutdown
   const shutdown = (signal) => {
     console.log(`\n${signal} received — shutting down gracefully...`);
-    server.close(() => {
+    getIO()?.close();
+    httpServer.close(() => {
       process.exit(0);
     });
   };

@@ -47,12 +47,24 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  // Silently re-fetch the session user (no loading screen). Used after
+  // in-place profile changes (e.g. a new profile picture) so the UI updates
+  // without a full browser reload.
+  const refreshUser = useCallback(async () => {
+    try {
+      const res = await authApi.me();
+      setUser(res.data.user);
+    } catch {
+      // keep the current state — a failed refresh must not log the user out
+    }
+  }, []);
+
   const isHrAdmin = user?.role === 'hr_admin';
   const isEmployee = user?.role === 'employee';
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, error, loginWithGoogle, logout, isHrAdmin, isEmployee, checkSession }}
+      value={{ user, loading, error, loginWithGoogle, logout, refreshUser, isHrAdmin, isEmployee, checkSession }}
     >
       {children}
     </AuthContext.Provider>

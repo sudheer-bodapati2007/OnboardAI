@@ -5,6 +5,10 @@ import { storage } from '../../config/storage.js';
 import { env } from '../../config/env.js';
 import { randomUUID } from 'node:crypto';
 import { validateImageSignature } from './employees.upload.js';
+import {
+  emitToOrg,
+  sanitizeEmployee,
+} from '../../realtime/socket.js';
 
 /**
  * Create a new employee within the authenticated user's organization.
@@ -15,6 +19,13 @@ export async function createEmployee(organizationId, data) {
     ...data,
     startDate: new Date(data.startDate),
   });
+
+  // Real-time: announce to the whole org AFTER persistence succeeded.
+  emitToOrg(organizationId, 'employee:created', {
+    employee: sanitizeEmployee(employee),
+  });
+  emitToOrg(organizationId, 'dashboard:update', { reason: 'employee_created' });
+
   return employee;
 }
 
@@ -66,6 +77,37 @@ export async function updateEmployee(organizationId, employeeId, data) {
   ).lean();
 
   if (!employee) throw new AppError('Employee not found', 404);
+
+  // Real-time: profile changes propagate to authorised org views.
+  emitToOrg(organizationId, 'employee:updated', {
+    employee: sanitizeEmployee(employee),
+  });
+  emitToOrg(organizationId, 'dashboard:update', { reason: 'employee_updated' });
+
+  return employee;
+}
+
+/**
+ * Activate/deactivate an employee.
+ * NOTE: this function was referenced by the controller and routes but was
+ * previously missing from this module — calling the endpoint threw at runtime.
+ */
+export async function updateEmployeeStatus(organizationId, employeeId, status) {
+  const employee = await Employee.findOneAndUpdate(
+    { _id: employeeId, organizationId },
+    { $set: { status } },
+    { new: true, runValidators: true }
+  ).lean();
+
+  if (!employee) throw new AppError('Employee not found', 404);
+
+  emitToOrg(organizationId, 'employee:updated', {
+    employee: sanitizeEmployee(employee),
+  });
+  emitToOrg(organizationId, 'dashboard:update', {
+    reason: status === 'inactive' ? 'employee_deactivated' : 'employee_updated',
+  });
+
   return employee;
 }
 
@@ -107,6 +149,12 @@ export async function uploadProfileImage(organizationId, userId, buffer, origina
   ).lean();
 
   if (!updated) throw new AppError('Employee not found', 404);
+
+  // Real-time: the profile image change should appear in the org views.
+  emitToOrg(organizationId, 'employee:updated', {
+    employee: sanitizeEmployee(updated),
+  });
+
   return updated;
 }
 
