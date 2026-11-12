@@ -139,8 +139,8 @@ STRICT RULES — follow every rule without exception:
 function buildEvidenceBlock(chunks) {
   if (!chunks.length) return '<evidence>No relevant policy documents found.</evidence>';
   const parts = chunks.map((c, i) => {
-    const src = `[${i + 1}] Document: "${c.documentName}"${c.pageNumber ? `, Page ${c.pageNumber}` : ''}`;
-    return `${src}\n${c.text.trim()}`;
+    const src = `[${i + 1}] Document: "${c.documentName ?? 'Policy document'}"${c.pageNumber ? `, Page ${c.pageNumber}` : ''}`;
+    return `${src}\n${(c.text ?? '').trim()}`;
   });
   return `<evidence>\n${parts.join('\n\n---\n\n')}\n</evidence>`;
 }
@@ -179,6 +179,7 @@ export async function answerQuestion(organizationId, question, {
   // 4. Call Gemini with bounded retries for transient failures
   let answer;
   let lastErr;
+  let emptyResponse = false;
   for (let attempt = 0; attempt <= GEMINI_MAX_RETRIES; attempt++) {
     try {
       const genAI = new GenAI(e.geminiApiKey);
@@ -191,7 +192,13 @@ export async function answerQuestion(organizationId, question, {
         GEMINI_REQUEST_TIMEOUT_MS,
         'generateContent timed out'
       );
-      answer = result.response.text();
+      const text = result?.response?.text?.();
+      // Malformed or empty model output is a provider failure, never an answer.
+      if (typeof text !== 'string' || !text.trim()) {
+        emptyResponse = true;
+        break;
+      }
+      answer = text;
       break; // success — exit retry loop
     } catch (err) {
       lastErr = err;
@@ -233,6 +240,9 @@ export async function answerQuestion(organizationId, question, {
 
   // All retries exhausted — classify the final error for the client.
   if (!answer) {
+    if (emptyResponse) {
+      throw new AppError('The AI service returned an empty response. Please try again.', 502);
+    }
     const msg = lastErr?.message ?? '';
     if (msg.includes('timeout') || msg.includes('ETIMEDOUT')) {
       throw new AppError('AI service timed out after multiple attempts. Please try again.', 504);
@@ -246,12 +256,12 @@ export async function answerQuestion(organizationId, question, {
     throw new AppError('The AI service is temporarily unavailable. Please try again.', 502);
   }
 
-  // 5. Build source citations
+  // 5. Build source citations (defensive — a malformed chunk must never 500)
   const sources = chunks.map((c) => ({
-    documentName: c.documentName,
-    pageNumber: c.pageNumber,
-    excerpt: c.text.slice(0, 200) + (c.text.length > 200 ? '…' : ''),
-    score: Math.round(c.score * 100) / 100,
+    documentName: c.documentName ?? 'Policy document',
+    pageNumber: c.pageNumber ?? null,
+    excerpt: (c.text ?? '').slice(0, 200) + ((c.text ?? '').length > 200 ? '…' : ''),
+    score: Math.round((c.score ?? 0) * 100) / 100,
   }));
 
   return { answer, sources, insufficient };

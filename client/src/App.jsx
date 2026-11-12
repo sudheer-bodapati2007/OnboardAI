@@ -4,6 +4,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext.jsx';
 import { ThemeProvider } from './contexts/ThemeContext.jsx';
 import { RealtimeProvider } from './contexts/RealtimeContext.jsx';
+import { ErrorBoundary } from './components/ErrorBoundary.jsx';
 import { ProtectedRoute } from './components/ProtectedRoute.jsx';
 import { AppLayout } from './layouts/AppLayout.jsx';
 
@@ -24,12 +25,13 @@ export default function App() {
     <AuthProvider>
       <RealtimeProvider>
         <ThemeProvider>
-          <Routes>
-          {/* Public */}
-          <Route path="/login" element={<LoginPage />} />
+          <ErrorBoundary>
+            <Routes>
+            {/* Public */}
+            <Route path="/login" element={<LoginPage />} />
 
-          {/* Root redirect */}
-          <Route path="/" element={<Navigate to="/login" replace />} />
+            {/* Root redirect */}
+            <Route path="/" element={<Navigate to="/login" replace />} />
 
         {/* Protected — shared layout */}
         <Route
@@ -122,7 +124,8 @@ export default function App() {
 
         {/* 404 */}
         <Route path="*" element={<NotFoundPage />} />
-      </Routes>
+            </Routes>
+          </ErrorBoundary>
         </ThemeProvider>
       </RealtimeProvider>
     </AuthProvider>

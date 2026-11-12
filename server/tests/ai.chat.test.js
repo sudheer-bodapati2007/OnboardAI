@@ -143,4 +143,56 @@ describe('answerQuestion', () => {
     assert.equal(result.sources[0].documentName, 'Leave Policy.pdf');
     assert.equal(result.sources[0].pageNumber, 3);
   });
+
+  it('renders sources safely when the chunk has no page number or malformed fields', async () => {
+    impls.retrieveRelevantChunks = async () => [
+      { documentName: null, pageNumber: undefined, text: undefined, score: 0.6 },
+    ];
+    impls.generateContent = async () => ({ response: { text: () => 'ok' } });
+
+    const result = await answerQuestion('org1', 'q', aiDeps);
+
+    assert.equal(result.sources.length, 1);
+    assert.equal(result.sources[0].documentName, 'Policy document');
+    assert.equal(result.sources[0].pageNumber, null);
+    assert.equal(result.sources[0].excerpt, '');
+  });
+
+  it('throws 502 with a clear message on an empty Gemini response', async () => {
+    impls.generateContent = async () => ({ response: { text: () => '' } });
+    await expectAppError(
+      answerQuestion('org1', 'hello', aiDeps),
+      502,
+      'empty response'
+    );
+  });
+
+  it('throws 502 with a clear message on a whitespace-only Gemini response', async () => {
+    impls.generateContent = async () => ({ response: { text: () => '   \n  ' } });
+    await expectAppError(
+      answerQuestion('org1', 'hello', aiDeps),
+      502,
+      'empty response'
+    );
+  });
+
+  it('throws 502 when the Gemini response is malformed (text() missing)', async () => {
+    impls.generateContent = async () => ({ response: {} });
+    await expectAppError(
+      answerQuestion('org1', 'hello', aiDeps),
+      502,
+      'empty response'
+    );
+  });
+
+  it('does not treat an empty response as retryable (single call)', async () => {
+    let calls = 0;
+    impls.generateContent = async () => {
+      calls++;
+      return { response: { text: () => '' } };
+    };
+    await expectAppError(answerQuestion('org1', 'hello', aiDeps), 502, 'empty response');
+    assert.equal(calls, 1, 'empty responses should not be retried');
+    impls.generateContent = async () => ({ response: { text: () => 'ok' } });
+  });
 });

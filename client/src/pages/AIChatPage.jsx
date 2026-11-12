@@ -6,12 +6,14 @@ import { Bot, Send, User, AlertCircle, BookOpen, Loader2, Trash2 } from 'lucide-
 import { aiApi } from '../services/api.js';
 
 function SourceCard({ source }) {
+  // Defensive rendering — malformed sources must never crash the message list.
+  if (!source || typeof source !== 'object') return null;
   return (
     <div className="mt-2 p-2.5 rounded-lg bg-gray-800/70 border border-gray-700/50 text-xs">
       <div className="flex items-center gap-1.5 mb-1">
         <BookOpen className="w-3 h-3 text-navy-400 flex-shrink-0" />
-        <span className="font-medium text-gray-300 truncate">{source.documentName}</span>
-        {source.pageNumber && (
+        <span className="font-medium text-gray-300 truncate">{source.documentName ?? 'Policy document'}</span>
+        {source.pageNumber != null && (
           <span className="text-gray-600 ml-auto flex-shrink-0">p.{source.pageNumber}</span>
         )}
       </div>
@@ -22,7 +24,7 @@ function SourceCard({ source }) {
   );
 }
 
-function MessageBubble({ msg }) {
+function MessageBubble({ msg, onRetry, busy }) {
   const isUser = msg.role === 'user';
 
   if (isUser) {
@@ -56,20 +58,23 @@ function MessageBubble({ msg }) {
             </div>
           )}
 
-          {/* Error notice */}
+          {/* Error notice — onRetry comes in via props so this component never
+              references state that is out of its scope. */}
           {msg.error && (
             <div className="flex items-start gap-2 mb-2 px-3 py-2 rounded-lg bg-red-900/30 border border-red-700/40 text-red-300 text-xs">
               <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <span>{msg.error}</span>
               </div>
-              <button
-                onClick={() => handleSend(true)}
-                className="text-xs text-blue-400 hover:text-blue-300 underline ml-2 flex-shrink-0"
-                disabled={loading}
-              >
-                Retry
-              </button>
+              {onRetry && (
+                <button
+                  onClick={onRetry}
+                  className="text-xs text-blue-400 hover:text-blue-300 underline ml-2 flex-shrink-0"
+                  disabled={busy}
+                >
+                  Retry
+                </button>
+              )}
             </div>
           )}
 
@@ -78,8 +83,8 @@ function MessageBubble({ msg }) {
             {msg.content}
           </div>
 
-          {/* Sources */}
-          {msg.sources && msg.sources.length > 0 && (
+          {/* Sources — Array.isArray guards against malformed payloads */}
+          {Array.isArray(msg.sources) && msg.sources.length > 0 && (
             <div className="mt-1">
               <p className="text-[11px] text-gray-600 px-1 mb-1">Sources</p>
               {msg.sources.map((s, i) => (
@@ -104,9 +109,11 @@ export default function AIChatPage() {
   ]);
   const [input, setInput]     = useState('');
   const [loading, setLoading] = useState(false);
-  const [retrying, setRetrying] = useState(false);
   const bottomRef             = useRef(null);
   const inputRef              = useRef(null);
+  // The last question actually sent — retry re-sends this, because the
+  // input box is cleared after the first attempt.
+  const lastQuestionRef       = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -128,45 +135,61 @@ export default function AIChatPage() {
   };
 
   const handleSend = async (isRetry = false) => {
-    const question = input.trim();
+    // Retry re-sends the stored question (the input box was already cleared);
+    // a normal send uses the current input.
+    const question = (isRetry ? lastQuestionRef.current : input.trim()) ?? '';
     if (!question || loading) return;
 
-    setInput('');
+    if (!isRetry) {
+      lastQuestionRef.current = question;
+      setInput('');
+    }
     setLoading(true);
-    setRetrying(false);
 
-    // Optimistically add user message (avoid duplicates on retry)
-    const userMsg = { role: 'user', content: question };
-    setMessages((prev) => {
-      const last = prev[prev.length - 1];
-      if (last && last.role === 'user' && last.content === question && !isRetry) {
-        return prev;
-      }
-      return [...prev, userMsg];
-    });
+    if (isRetry) {
+      // Drop earlier failed assistant messages so the conversation stays clean.
+      setMessages((prev) => prev.filter((m) => !m.error));
+    } else {
+      // Optimistically add the user message (avoid duplicates on retry).
+      const userMsg = { role: 'user', content: question };
+      setMessages((prev) => {
+        const last = prev[prev.length - 1];
+        if (last && last.role === 'user' && last.content === question) {
+          return prev;
+        }
+        return [...prev, userMsg];
+      });
+    }
 
     try {
-      // Build history (exclude the welcome message)
-      const history = messages.slice(1).map((m) => ({
-        role: m.role === 'user' ? 'user' : 'model',
-        text: m.content,
-      }));
+      // Build history (exclude the welcome message and failed error bubbles —
+      // neither is part of the real conversation).
+      const history = messages
+        .slice(1)
+        .filter((m) => !m.error)
+        .map((m) => ({
+          role: m.role === 'user' ? 'user' : 'model',
+          text: m.content,
+        }));
 
       const res = await aiApi.chat(question, history);
-      const { answer, sources, insufficient } = res.data ?? {};
+      const { answer, sources, insufficient } = res?.data ?? {};
 
       setMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: answer ?? 'Sorry, I could not generate a response.',
-          sources: sources ?? [],
+          content:
+            typeof answer === 'string' && answer.trim()
+              ? answer
+              : 'Sorry, I could not generate a response. Please try rephrasing your question.',
+          sources: Array.isArray(sources) ? sources : [],
           insufficient: insufficient ?? false,
         },
       ]);
     } catch (err) {
-      const status = err.status;
-      const errMsg = errorForStatus(status, err.message);
+      const status = err?.status;
+      const errMsg = errorForStatus(status, err?.message);
 
       setMessages((prev) => [
         ...prev,
@@ -179,6 +202,7 @@ export default function AIChatPage() {
         },
       ]);
     } finally {
+      // The loading indicator ALWAYS stops, success or failure.
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 50);
     }
@@ -192,6 +216,7 @@ export default function AIChatPage() {
   };
 
   const clearChat = () => {
+    lastQuestionRef.current = null;
     setMessages([
       {
         role: 'assistant',
@@ -229,7 +254,7 @@ export default function AIChatPage() {
       {/* Message area */}
       <div className="flex-1 overflow-y-auto card p-4 space-y-4 mb-4">
         {messages.map((msg, i) => (
-          <MessageBubble key={i} msg={msg} />
+          <MessageBubble key={i} msg={msg} onRetry={() => handleSend(true)} busy={loading} />
         ))}
 
         {/* Loading indicator */}
