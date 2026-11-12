@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react';
 
 let chatImpl;
 
@@ -20,7 +20,15 @@ vi.mock('../services/api.js', () => ({
   },
 }));
 
+// AIChatPage consumes AIChatContext, which reads the authenticated user for
+// per-user conversation isolation. Mock a stable user for these tests.
+const authMock = vi.hoisted(() => ({ user: { _id: 'user-1', role: 'hr_admin' } }));
+vi.mock('../contexts/AuthContext.jsx', () => ({
+  useAuth: () => authMock,
+}));
+
 import { aiApi } from '../services/api.js';
+import { AIChatProvider } from '../contexts/AIChatContext.jsx';
 import AIChatPage from '../pages/AIChatPage.jsx';
 
 const QUESTION = 'How many vacation days do I have?';
@@ -33,6 +41,15 @@ function typeAndSend(question = QUESTION) {
   // (jsdom/vitest does not reliably trigger React onClick on this button;
   // the Enter key exercises identical handleSend logic.)
   fireEvent.keyDown(box, { key: 'Enter', shiftKey: false });
+}
+
+// The page must run inside AIChatProvider (conversation state lives there).
+function renderChat() {
+  return render(
+    <AIChatProvider>
+      <AIChatPage />
+    </AIChatProvider>
+  );
 }
 
 beforeEach(() => {
@@ -56,7 +73,7 @@ describe('AIChatPage — successful responses', () => {
       },
     });
 
-    render(<AIChatPage />);
+    renderChat();
     typeAndSend();
 
     await waitFor(() => expect(screen.getByText(ANSWER)).toBeInTheDocument());
@@ -69,7 +86,7 @@ describe('AIChatPage — successful responses', () => {
   it('shows a fallback message when the response is malformed/empty', async () => {
     chatImpl.mockResolvedValue({ data: {} }); // missing answer/sources
 
-    render(<AIChatPage />);
+    renderChat();
     typeAndSend();
 
     await waitFor(() =>
@@ -84,7 +101,7 @@ describe('AIChatPage — failed requests (blank-page regression)', () => {
   it('keeps the page rendered with a readable error when the API fails', async () => {
     chatImpl.mockRejectedValue({ status: 503, message: 'Service Unavailable' });
 
-    render(<AIChatPage />);
+    renderChat();
     typeAndSend();
 
     // The user's question is still visible — state was never wiped
@@ -102,7 +119,7 @@ describe('AIChatPage — failed requests (blank-page regression)', () => {
   it('stops the loading indicator after a failure (send re-enabled)', async () => {
     chatImpl.mockRejectedValue({ status: 503, message: 'Service Unavailable' });
 
-    render(<AIChatPage />);
+    renderChat();
     typeAndSend();
 
     await waitFor(() => expect(screen.getByText('Retry')).toBeInTheDocument());
@@ -116,7 +133,7 @@ describe('AIChatPage — failed requests (blank-page regression)', () => {
       .mockRejectedValueOnce({ status: 503, message: 'Service Unavailable' })
       .mockResolvedValueOnce({ data: { answer: ANSWER, sources: [], insufficient: false } });
 
-    render(<AIChatPage />);
+    renderChat();
     typeAndSend();
 
     await waitFor(() => expect(screen.getByText('Retry')).toBeInTheDocument());
@@ -138,7 +155,7 @@ describe('AIChatPage — failed requests (blank-page regression)', () => {
       message: 'timeout of 90000ms exceeded',
     });
 
-    render(<AIChatPage />);
+    renderChat();
     typeAndSend();
 
     await waitFor(() =>
@@ -156,7 +173,7 @@ describe('AIChatPage — failed requests (blank-page regression)', () => {
       message: 'Network Error',
     });
 
-    render(<AIChatPage />);
+    renderChat();
     typeAndSend();
 
     await waitFor(() =>

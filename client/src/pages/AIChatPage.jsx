@@ -1,9 +1,11 @@
 // src/pages/AIChatPage.jsx
 // Available to all authenticated users.
-// Session-based conversation (React state, not persisted to DB).
+// The conversation lives in AIChatContext (in-memory, session-scoped) so it
+// survives navigation within the SPA; a page refresh starts a fresh chat.
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, Send, User, AlertCircle, BookOpen, Loader2, Trash2 } from 'lucide-react';
 import { aiApi } from '../services/api.js';
+import { useAIChat } from '../contexts/AIChatContext.jsx';
 
 function SourceCard({ source }) {
   // Defensive rendering — malformed sources must never crash the message list.
@@ -99,21 +101,13 @@ function MessageBubble({ msg, onRetry, busy }) {
 }
 
 export default function AIChatPage() {
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: 'Hello! I can answer questions about your company\'s policies. Ask me anything based on the uploaded policy documents.',
-      sources: [],
-      insufficient: false,
-    },
-  ]);
+  // Conversation state lives in AIChatContext — shared across route changes,
+  // reset on user change, and never persisted (refresh = fresh conversation).
+  const { messages, setMessages, lastQuestion, setLastQuestion, clearChat } = useAIChat();
   const [input, setInput]     = useState('');
   const [loading, setLoading] = useState(false);
   const bottomRef             = useRef(null);
   const inputRef              = useRef(null);
-  // The last question actually sent — retry re-sends this, because the
-  // input box is cleared after the first attempt.
-  const lastQuestionRef       = useRef(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -157,11 +151,11 @@ export default function AIChatPage() {
   const handleSend = async (isRetry = false) => {
     // Retry re-sends the stored question (the input box was already cleared);
     // a normal send uses the current input.
-    const question = (isRetry ? lastQuestionRef.current : input.trim()) ?? '';
+    const question = (isRetry ? lastQuestion : input.trim()) ?? '';
     if (!question || loading) return;
 
     if (!isRetry) {
-      lastQuestionRef.current = question;
+      setLastQuestion(question);
       setInput('');
     }
     setLoading(true);
@@ -233,18 +227,6 @@ export default function AIChatPage() {
       e.preventDefault();
       handleSend();
     }
-  };
-
-  const clearChat = () => {
-    lastQuestionRef.current = null;
-    setMessages([
-      {
-        role: 'assistant',
-        content: 'Hello! I can answer questions about your company\'s policies. Ask me anything based on the uploaded policy documents.',
-        sources: [],
-        insufficient: false,
-      },
-    ]);
   };
 
   return (

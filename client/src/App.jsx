@@ -2,6 +2,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext.jsx';
+import { AIChatProvider } from './contexts/AIChatContext.jsx';
 import { ThemeProvider } from './contexts/ThemeContext.jsx';
 import { RealtimeProvider } from './contexts/RealtimeContext.jsx';
 import { ErrorBoundary } from './components/ErrorBoundary.jsx';
@@ -23,6 +24,8 @@ import NotFoundPage from './pages/NotFoundPage.jsx';
 export default function App() {
   return (
     <AuthProvider>
+      {/* Above the Routes so the in-memory chat survives route changes. */}
+      <AIChatProvider>
       <RealtimeProvider>
         <ThemeProvider>
           <ErrorBoundary>
@@ -128,6 +131,7 @@ export default function App() {
           </ErrorBoundary>
         </ThemeProvider>
       </RealtimeProvider>
+      </AIChatProvider>
     </AuthProvider>
   );
 }
