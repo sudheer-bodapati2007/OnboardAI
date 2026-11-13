@@ -20,8 +20,7 @@ import aiRoutes from './modules/ai/ai.routes.js';
 import { authenticate, requireHrAdmin } from './middleware/auth.js';
 import * as OnboardingController from './modules/onboarding/onboarding.controller.js';
 import { validate } from './middleware/validate.js';
-import { startOnboardingSchema } from './modules/onboarding/onboarding.validation.js';
-
+import { startOnboardingSchema, createTaskSchema } from './modules/onboarding/onboarding.validation.js';
 const app = express();
 // Trust Render's reverse proxy for client IP detection and rate limiting.
 app.set('trust proxy', 1);
@@ -110,6 +109,14 @@ app.get(
   authenticate,
   requireHrAdmin,
   OnboardingController.getEmployeeTasks
+);
+// HR assigns an additional task to an employee (any lifecycle stage).
+app.post(
+  '/api/v1/employees/:employeeId/tasks',
+  authenticate,
+  requireHrAdmin,
+  validate(createTaskSchema),
+  OnboardingController.createTask
 );
 
 app.use('/api/v1/onboarding', onboardingRoutes);

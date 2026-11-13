@@ -130,7 +130,7 @@ export default function MyOnboardingPage() {
       ) : (
         <>
           {/* Progress summary */}
-          <div className="bg-gray-100 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
+          <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-6">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -143,7 +143,7 @@ export default function MyOnboardingPage() {
               <div className="text-right">
                 <p className="text-3xl font-bold text-gray-900 dark:text-white">{pct}%</p>
                 {overdue > 0 && (
-                  <p className="text-xs text-red-400 mt-1">{overdue} overdue</p>
+                  <p className="text-xs text-red-500 dark:text-red-400 mt-1">{overdue} overdue</p>
                 )}
               </div>
             </div>
@@ -156,26 +156,26 @@ export default function MyOnboardingPage() {
             const isExpanded = expandedCategories[cat] !== false;
 
             return (
-              <div key={cat} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+              <div key={cat} className="bg-white border border-slate-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
                 <button
                   onClick={() => toggleCategory(cat)}
-                  className="w-full flex items-center justify-between p-4 hover:bg-white/5 transition-colors text-left"
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors text-left"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="font-medium text-white">{cat}</span>
-                    <span className="text-xs text-gray-500 bg-gray-800 px-2 py-0.5 rounded-full">
+                    <span className="font-medium text-slate-900 dark:text-white">{cat}</span>
+                    <span className="text-xs text-slate-500 dark:text-gray-500 bg-slate-100 dark:bg-gray-800 px-2 py-0.5 rounded-full">
                       {catCompleted}/{catTasks.length}
                     </span>
                   </div>
                   {isExpanded ? (
-                    <ChevronUp className="w-4 h-4 text-gray-500" />
+                    <ChevronUp className="w-4 h-4 text-slate-400 dark:text-gray-500" />
                   ) : (
-                    <ChevronDown className="w-4 h-4 text-gray-500" />
+                    <ChevronDown className="w-4 h-4 text-slate-400 dark:text-gray-500" />
                   )}
                 </button>
 
                 {isExpanded && (
-                  <div className="border-t border-gray-800 divide-y divide-gray-800/50">
+                  <div className="border-t border-slate-200 divide-y divide-slate-100 dark:border-gray-800 dark:divide-gray-800/50">
                     {catTasks.map((task) => {
                       const isCompleted = task.status === 'completed';
                       const isUpdating = updatingTask === task._id;
@@ -196,13 +196,13 @@ export default function MyOnboardingPage() {
                             {/* Status icon */}
                             <div className="mt-0.5 flex-shrink-0">
                               {isCompleted ? (
-                                <CheckCircle2 className="w-5 h-5 text-green-400" />
+                                <CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-green-400" />
                               ) : task.status === 'in_progress' ? (
-                                <Clock className="w-5 h-5 text-blue-400" />
+                                <Clock className="w-5 h-5 text-indigo-500 dark:text-blue-400" />
                               ) : isOverdueTask ? (
-                                <AlertCircle className="w-5 h-5 text-red-400" />
+                                <AlertCircle className="w-5 h-5 text-red-500 dark:text-red-400" />
                               ) : (
-                                <Circle className="w-5 h-5 text-gray-500" />
+                                <Circle className="w-5 h-5 text-slate-400 dark:text-gray-500" />
                               )}
                             </div>
 
@@ -220,19 +220,19 @@ export default function MyOnboardingPage() {
                               )}
                               <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                                 {task.dueDate && (
-                                  <span className={`text-xs ${isOverdueTask ? 'text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                  <span className={`text-xs ${isOverdueTask ? 'text-red-500 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
                                     Due {fmtDate(task.dueDate)}
                                   </span>
                                 )}
                                 {task.completedAt && (
-                                  <span className="text-xs text-green-400">
+                                  <span className="text-xs text-emerald-500 dark:text-green-400">
                                     ✓ Completed {fmtDate(task.completedAt)}
                                   </span>
                                 )}
                               </div>
                               {/* Per-task error */}
                               {taskError && (
-                                <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
+                                <p className="text-xs text-red-500 dark:text-red-400 mt-1.5 flex items-center gap-1">
                                   <AlertCircle className="w-3 h-3 flex-shrink-0" />
                                   {taskError}
                                 </p>
@@ -263,8 +263,10 @@ export default function MyOnboardingPage() {
                                   onClick={() => setTaskStatus(task, 'completed')}
                                   disabled={isUpdating}
                                   className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium
-                                    bg-green-900/30 border border-green-700/50 text-green-400 dark:bg-green-900/20 dark:border-green-600/50 dark:text-green-300
-                                    hover:bg-green-900/50 hover:border-green-600/60 hover:text-green-300
+                                    bg-emerald-50 border border-emerald-200 text-emerald-700
+                                    hover:bg-emerald-100 hover:border-emerald-300 hover:text-emerald-800
+                                    dark:bg-green-900/20 dark:border-green-600/50 dark:text-green-300
+                                    dark:hover:bg-green-900/50 dark:hover:border-green-600/60 dark:hover:text-green-300
                                     transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                                   title="Mark this task as complete"
                                 >

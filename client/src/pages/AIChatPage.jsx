@@ -11,16 +11,16 @@ function SourceCard({ source }) {
   // Defensive rendering — malformed sources must never crash the message list.
   if (!source || typeof source !== 'object') return null;
   return (
-    <div className="mt-2 p-2.5 rounded-lg bg-gray-800/70 border border-gray-700/50 text-xs">
+    <div className="mt-2 p-2.5 rounded-lg bg-slate-100 border border-slate-200 text-xs dark:bg-gray-800/70 dark:border-gray-700/50">
       <div className="flex items-center gap-1.5 mb-1">
-        <BookOpen className="w-3 h-3 text-navy-400 flex-shrink-0" />
-        <span className="font-medium text-gray-300 truncate">{source.documentName ?? 'Policy document'}</span>
+        <BookOpen className="w-3 h-3 text-indigo-600 dark:text-navy-400 flex-shrink-0" />
+        <span className="font-medium text-slate-700 dark:text-gray-300 truncate">{source.documentName ?? 'Policy document'}</span>
         {source.pageNumber != null && (
-          <span className="text-gray-600 ml-auto flex-shrink-0">p.{source.pageNumber}</span>
+          <span className="text-slate-400 dark:text-gray-600 ml-auto flex-shrink-0">p.{source.pageNumber}</span>
         )}
       </div>
       {source.excerpt && (
-        <p className="text-gray-500 line-clamp-2 leading-relaxed">{source.excerpt}</p>
+        <p className="text-slate-500 dark:text-gray-500 line-clamp-2 leading-relaxed">{source.excerpt}</p>
       )}
     </div>
   );
@@ -36,8 +36,8 @@ function MessageBubble({ msg, onRetry, busy }) {
           <div className="px-4 py-2.5 rounded-2xl rounded-br-sm bg-navy-600 text-white text-sm leading-relaxed">
             {msg.content}
           </div>
-          <div className="w-7 h-7 rounded-full bg-navy-700 flex items-center justify-center flex-shrink-0 mb-0.5">
-            <User className="w-3.5 h-3.5 text-navy-300" />
+          <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0 mb-0.5">
+            <User className="w-3.5 h-3.5 text-slate-600 dark:text-navy-300" />
           </div>
         </div>
       </div>
@@ -48,13 +48,13 @@ function MessageBubble({ msg, onRetry, busy }) {
   return (
     <div className="flex justify-start">
       <div className="max-w-[85%] flex items-start gap-2">
-        <div className="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center flex-shrink-0 mt-0.5">
-          <Bot className="w-3.5 h-3.5 text-gray-300" />
+        <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0 mt-0.5">
+          <Bot className="w-3.5 h-3.5 text-slate-500 dark:text-gray-300" />
         </div>
         <div>
           {/* Insufficient evidence notice */}
           {msg.insufficient && (
-            <div className="flex items-start gap-2 mb-2 px-3 py-2 rounded-lg bg-amber-900/30 border border-amber-700/40 text-amber-300 text-xs">
+            <div className="flex items-start gap-2 mb-2 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 text-xs dark:bg-amber-900/30 dark:border-amber-700/40 dark:text-amber-300">
               <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
               <span>I couldn&apos;t find sufficient information in the uploaded policy documents to fully answer this question.</span>
             </div>
@@ -63,7 +63,7 @@ function MessageBubble({ msg, onRetry, busy }) {
           {/* Error notice — onRetry comes in via props so this component never
               references state that is out of its scope. */}
           {msg.error && (
-            <div className="flex items-start gap-2 mb-2 px-3 py-2 rounded-lg bg-red-900/30 border border-red-700/40 text-red-300 text-xs">
+            <div className="flex items-start gap-2 mb-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-600 text-xs dark:bg-red-900/30 dark:border-red-700/40 dark:text-red-300">
               <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <span>{msg.error}</span>
@@ -71,7 +71,7 @@ function MessageBubble({ msg, onRetry, busy }) {
               {onRetry && (
                 <button
                   onClick={onRetry}
-                  className="text-xs text-blue-400 hover:text-blue-300 underline ml-2 flex-shrink-0"
+                  className="text-xs text-indigo-600 hover:text-indigo-700 dark:text-blue-400 dark:hover:text-blue-300 underline ml-2 flex-shrink-0"
                   disabled={busy}
                 >
                   Retry
@@ -81,7 +81,7 @@ function MessageBubble({ msg, onRetry, busy }) {
           )}
 
           {/* Answer text */}
-          <div className="px-4 py-2.5 rounded-2xl rounded-bl-sm bg-gray-800 text-gray-100 text-sm leading-relaxed whitespace-pre-wrap">
+          <div className="px-4 py-2.5 rounded-2xl rounded-bl-sm bg-slate-100 text-slate-800 text-sm leading-relaxed whitespace-pre-wrap dark:bg-gray-800 dark:text-gray-100">
             {msg.content}
           </div>
 
@@ -234,18 +234,18 @@ export default function AIChatPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Bot className="w-6 h-6 text-navy-400" />
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <Bot className="w-6 h-6 text-indigo-600 dark:text-navy-400" />
             AI Policy Assistant
           </h1>
-          <p className="text-gray-400 mt-1 text-sm">
+          <p className="text-slate-500 dark:text-gray-400 mt-1 text-sm">
             Ask questions — answers are grounded in your uploaded policy documents.
           </p>
         </div>
         {messages.length > 1 && (
           <button
             onClick={clearChat}
-            className="p-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-white/5 transition-all"
+            className="p-2 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:text-gray-500 dark:hover:text-gray-300 dark:hover:bg-white/5 transition-all"
             title="Clear conversation"
           >
             <Trash2 className="w-4 h-4" />
@@ -263,12 +263,12 @@ export default function AIChatPage() {
         {loading && (
           <div className="flex justify-start">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-full bg-gray-700 flex items-center justify-center">
-                <Bot className="w-3.5 h-3.5 text-gray-300" />
+              <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-gray-700 flex items-center justify-center">
+                <Bot className="w-3.5 h-3.5 text-slate-500 dark:text-gray-300" />
               </div>
-              <div className="px-4 py-2.5 rounded-2xl rounded-bl-sm bg-gray-800 flex items-center gap-2">
-                <Loader2 className="w-3.5 h-3.5 text-navy-400 animate-spin" />
-                <span className="text-xs text-gray-400">Thinking…</span>
+              <div className="px-4 py-2.5 rounded-2xl rounded-bl-sm bg-slate-100 dark:bg-gray-800 flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 text-indigo-600 dark:text-navy-400 animate-spin" />
+                <span className="text-xs text-slate-500 dark:text-gray-400">Thinking…</span>
               </div>
             </div>
           </div>
@@ -303,7 +303,7 @@ export default function AIChatPage() {
           )}
         </button>
       </div>
-      <p className="text-[11px] text-gray-700 text-right mt-1">{input.length}/1000</p>
+      <p className="text-[11px] text-slate-400 dark:text-gray-700 text-right mt-1">{input.length}/1000</p>
     </div>
   );
 }

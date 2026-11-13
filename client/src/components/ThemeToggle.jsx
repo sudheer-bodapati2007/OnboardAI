@@ -12,8 +12,8 @@ export function ThemeToggle() {
       onClick={toggleTheme}
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium
-        bg-gray-800 border border-gray-700 text-gray-300
-        hover:bg-gray-700 hover:text-white transition-all"
+        bg-slate-100 border border-slate-300 text-slate-600 hover:bg-slate-200 hover:text-slate-900
+        dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white transition-all"
     >
       {isDark ? (
         <>

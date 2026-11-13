@@ -64,41 +64,41 @@ export default function LoginPage() {
   const isConfigured = !!GOOGLE_CLIENT_ID;
 
   return (
-    <div className="min-h-screen bg-midnight-950 flex">
+    <div className="min-h-screen bg-slate-50 dark:bg-midnight-950 flex">
       {/* Left panel — branding */}
-      <div className="hidden lg:flex w-1/2 flex-col justify-between p-12 bg-gradient-to-br from-navy-950 via-midnight-950 to-navy-900 border-r border-gray-800">
+      <div className="hidden lg:flex w-1/2 flex-col justify-between p-12 bg-gradient-to-br from-indigo-50 via-slate-50 to-indigo-100 dark:from-navy-950 dark:via-midnight-950 dark:to-navy-900 border-r border-slate-200 dark:border-gray-800">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-navy-600 flex items-center justify-center">
             <Sparkles className="w-6 h-6 text-white" />
           </div>
-          <span className="text-xl font-bold text-white">OnboardAI</span>
+          <span className="text-xl font-bold text-slate-900 dark:text-white">OnboardAI</span>
         </div>
 
         <div>
-          <h2 className="text-4xl font-bold text-white leading-tight mb-4">
+          <h2 className="text-4xl font-bold text-slate-900 dark:text-white leading-tight mb-4">
             Employee onboarding,{' '}
-            <span className="text-navy-400">reimagined</span>
+            <span className="text-indigo-600 dark:text-navy-400">reimagined</span>
           </h2>
-          <p className="text-gray-400 text-lg mb-10">
+          <p className="text-slate-600 dark:text-gray-400 text-lg mb-10">
             Streamline your HR workflows with intelligent task management and real-time progress tracking.
           </p>
 
           <div className="space-y-6">
             {FEATURES.map(({ icon: Icon, label, desc }) => (
               <div key={label} className="flex items-start gap-4">
-                <div className="w-10 h-10 rounded-lg bg-navy-900/80 border border-navy-700/50 flex items-center justify-center flex-shrink-0">
-                  <Icon className="w-5 h-5 text-navy-400" />
+                <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center flex-shrink-0 dark:bg-navy-900/80 dark:border-navy-700/50">
+                  <Icon className="w-5 h-5 text-indigo-600 dark:text-navy-400" />
                 </div>
                 <div>
-                  <p className="font-semibold text-white text-sm">{label}</p>
-                  <p className="text-gray-400 text-sm">{desc}</p>
+                  <p className="font-semibold text-slate-900 dark:text-white text-sm">{label}</p>
+                  <p className="text-slate-500 dark:text-gray-400 text-sm">{desc}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <p className="text-gray-600 text-sm">© 2024 OnboardAI. Portfolio project.</p>
+        <p className="text-slate-400 dark:text-gray-600 text-sm">© 2024 OnboardAI. Portfolio project.</p>
       </div>
 
       {/* Right panel — login form */}
@@ -109,20 +109,20 @@ export default function LoginPage() {
             <div className="w-9 h-9 rounded-xl bg-navy-600 flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-white" />
             </div>
-            <span className="text-lg font-bold text-white">OnboardAI</span>
+            <span className="text-lg font-bold text-slate-900 dark:text-white">OnboardAI</span>
           </div>
 
           <div className="mb-8">
-            <h1 className="text-2xl font-bold text-white mb-2">Welcome back</h1>
-            <p className="text-gray-400">Sign in to your account to continue</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Welcome back</h1>
+            <p className="text-slate-500 dark:text-gray-400">Sign in to your account to continue</p>
           </div>
 
           {!isConfigured ? (
-            <div className="rounded-xl bg-amber-900/20 border border-amber-700/50 p-4 text-sm">
-              <p className="font-semibold text-amber-400 mb-1">Configuration required</p>
-              <p className="text-amber-300/80">
-                Set <code className="bg-amber-900/40 px-1 rounded">VITE_GOOGLE_CLIENT_ID</code> in{' '}
-                <code className="bg-amber-900/40 px-1 rounded">client/.env</code> to enable Google Sign-In.
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-4 text-sm dark:bg-amber-900/20 dark:border-amber-700/50">
+              <p className="font-semibold text-amber-600 dark:text-amber-400 mb-1">Configuration required</p>
+              <p className="text-amber-700 dark:text-amber-300/80">
+                Set <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded">VITE_GOOGLE_CLIENT_ID</code> in{' '}
+                <code className="bg-amber-100 dark:bg-amber-900/40 px-1 rounded">client/.env</code> to enable Google Sign-In.
               </p>
             </div>
           ) : (
@@ -132,16 +132,16 @@ export default function LoginPage() {
                 className="flex justify-center"
                 id="google-signin-button"
               />
-              <p className="text-center text-xs text-gray-500">
+              <p className="text-center text-xs text-slate-500 dark:text-gray-500">
                 By signing in you agree to our terms of service.
               </p>
             </div>
           )}
 
-          <div className="mt-8 p-4 rounded-xl bg-gray-900 border border-gray-800">
-            <p className="text-xs font-medium text-gray-400 mb-2">First-time setup</p>
-            <p className="text-xs text-gray-500">
-              Set <code className="text-gray-300">ADMIN_SEED_EMAIL</code> on the server to bootstrap the first HR admin account.
+          <div className="mt-8 p-4 rounded-xl bg-white border border-slate-200 dark:bg-gray-900 dark:border-gray-800">
+            <p className="text-xs font-medium text-slate-500 dark:text-gray-400 mb-2">First-time setup</p>
+            <p className="text-xs text-slate-500 dark:text-gray-500">
+              Set <code className="text-slate-700 dark:text-gray-300">ADMIN_SEED_EMAIL</code> on the server to bootstrap the first HR admin account.
             </p>
           </div>
         </div>

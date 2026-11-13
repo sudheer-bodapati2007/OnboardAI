@@ -11,14 +11,14 @@ export default function NotFoundPage() {
   const home = user?.role === 'hr_admin' ? '/dashboard' : '/my-onboarding';
 
   return (
-    <div className="min-h-screen bg-midnight-950 flex items-center justify-center p-8">
+    <div className="min-h-screen bg-slate-50 dark:bg-midnight-950 flex items-center justify-center p-8">
       <div className="text-center animate-fadeIn">
-        <div className="w-16 h-16 rounded-2xl bg-navy-600/20 border border-navy-600/30 flex items-center justify-center mx-auto mb-6">
-          <Sparkles className="w-8 h-8 text-navy-400" />
+        <div className="w-16 h-16 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center mx-auto mb-6 dark:bg-navy-600/20 dark:border-navy-600/30">
+          <Sparkles className="w-8 h-8 text-indigo-600 dark:text-navy-400" />
         </div>
-        <h1 className="text-7xl font-black text-gray-800 mb-4">404</h1>
-        <h2 className="text-xl font-bold text-white mb-2">Page not found</h2>
-        <p className="text-gray-400 text-sm mb-8 max-w-sm">
+        <h1 className="text-7xl font-black text-slate-300 dark:text-gray-800 mb-4">404</h1>
+        <h2 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Page not found</h2>
+        <p className="text-slate-500 dark:text-gray-400 text-sm mb-8 max-w-sm">
           The page you're looking for doesn't exist or you don't have permission to view it.
         </p>
         <button onClick={() => navigate(user ? home : '/login')} className="btn-primary">

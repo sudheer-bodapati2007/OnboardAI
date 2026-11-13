@@ -18,6 +18,17 @@ export const createTemplateSchema = z.object({
 
 export const updateTemplateSchema = createTemplateSchema.partial();
 
+// HR-assigned additional task (independent of any template journey).
+// Works for any employee, regardless of onboarding progress or completion.
+export const createTaskSchema = z.object({
+  title: z.string().min(1, 'Task title is required').max(300, 'Task title too long').trim(),
+  description: z.string().max(1000).trim().optional().default(''),
+  category: z.string().max(100).trim().optional().default('General'),
+  // ISO date string (or null) from the frontend date picker; parsed + checked
+  // in the service so an invalid value returns a clean 422, not a CastError.
+  dueDate: z.string().optional().nullable(),
+});
+
 export const startOnboardingSchema = z.object({
   templateId: z.string().min(1),
 });

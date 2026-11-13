@@ -88,15 +88,15 @@ export default function EmployeeFormPage() {
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
-          <h1 className="text-2xl font-bold text-white">{isEdit ? 'Edit Employee' : 'Add Employee'}</h1>
-          <p className="text-gray-400 text-sm">{isEdit ? 'Update employee information' : 'Create a new employee record'}</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{isEdit ? 'Edit Employee' : 'Add Employee'}</h1>
+          <p className="text-slate-500 dark:text-gray-400 text-sm">{isEdit ? 'Update employee information' : 'Create a new employee record'}</p>
         </div>
       </div>
 
       {/* Form */}
-      <form onSubmit={handleSubmit(onSubmit)} className="bg-gray-900 border border-gray-800 rounded-xl p-6 space-y-5">
+      <form onSubmit={handleSubmit(onSubmit)} className="bg-white border border-slate-200 rounded-xl p-6 space-y-5 dark:bg-gray-900 dark:border-gray-800">
         {serverError && (
-          <div className="rounded-lg bg-red-900/20 border border-red-800/50 p-3 text-sm text-red-400">
+          <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:border-red-800/50 dark:text-red-400">
             {serverError}
           </div>
         )}

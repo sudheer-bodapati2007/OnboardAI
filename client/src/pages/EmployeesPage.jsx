@@ -76,8 +76,8 @@ export default function EmployeesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Employees</h1>
-          <p className="text-gray-400 text-sm mt-1">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Employees</h1>
+          <p className="text-slate-500 dark:text-gray-400 text-sm mt-1">
             {meta.total > 0 ? `${meta.total} total employee${meta.total !== 1 ? 's' : ''}` : 'Manage your workforce'}
           </p>
         </div>
@@ -93,7 +93,7 @@ export default function EmployeesPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 dark:text-gray-500" />
           <input
             type="text"
             placeholder="Search name or email…"
@@ -144,23 +144,23 @@ export default function EmployeesPage() {
                   <th></th>
                 </tr>
               </thead>
-              <tbody className="bg-gray-900">
+              <tbody className="bg-transparent dark:bg-gray-900">
                 {employees.map((emp) => (
                   <tr key={emp._id}>
                     <td>
                       <div>
-                        <p className="font-medium text-white">{emp.fullName}</p>
-                        <p className="text-xs text-gray-500">{emp.email}</p>
+                        <p className="font-medium text-slate-900 dark:text-white">{emp.fullName}</p>
+                        <p className="text-xs text-slate-500 dark:text-gray-500">{emp.email}</p>
                       </div>
                     </td>
-                    <td className="text-gray-300">{emp.department}</td>
-                    <td className="text-gray-300">{emp.jobTitle}</td>
-                    <td className="text-gray-400 text-sm">{fmtDate(emp.startDate)}</td>
+                    <td className="text-slate-600 dark:text-gray-300">{emp.department}</td>
+                    <td className="text-slate-600 dark:text-gray-300">{emp.jobTitle}</td>
+                    <td className="text-slate-500 dark:text-gray-400 text-sm">{fmtDate(emp.startDate)}</td>
                     <td><Badge variant={emp.status} /></td>
                     <td>
                       <button
                         onClick={() => navigate(`/employees/${emp._id}`)}
-                        className="text-navy-400 hover:text-navy-300 text-sm font-medium transition-colors"
+                        className="text-indigo-600 hover:text-indigo-700 dark:text-navy-400 dark:hover:text-navy-300 text-sm font-medium transition-colors"
                       >
                         View →
                       </button>

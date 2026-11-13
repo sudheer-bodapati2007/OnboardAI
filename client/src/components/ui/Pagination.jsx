@@ -15,9 +15,9 @@ export function Pagination({ page, totalPages, onPageChange }) {
         <ChevronLeft className="w-4 h-4" />
       </button>
 
-      <span className="text-sm text-gray-400 px-3">
-        Page <span className="text-white font-medium">{page}</span> of{' '}
-        <span className="text-white font-medium">{totalPages}</span>
+      <span className="text-sm text-slate-500 dark:text-gray-400 px-3">
+        Page <span className="text-slate-900 dark:text-white font-medium">{page}</span> of{' '}
+        <span className="text-slate-900 dark:text-white font-medium">{totalPages}</span>
       </span>
 
       <button

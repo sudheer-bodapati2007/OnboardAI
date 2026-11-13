@@ -21,16 +21,20 @@
   }
 
   .light {
-    --color-bg-primary: #ffffff;
-    --color-bg-secondary: #f8fafc;
-    --color-bg-tertiary: #f1f5f9;
-    --color-text-primary: #0f172a;
-    --color-text-secondary: #334155;
-    --color-text-muted: #64748b;
-    --color-border: #e2e8f0;
-    --color-card: #ffffff;
-    --color-input-bg: #ffffff;
-    --color-input-border: #cbd5e1;
+    /* Professional light palette — soft off-white canvas, pure white
+       surfaces, indigo accents, slate text. */
+    --color-bg-primary: #F7F8FC;      /* main background: soft off-white */
+    --color-bg-secondary: #EEF2FF;    /* secondary surfaces: soft lavender */
+    --color-bg-tertiary: #E2E8F0;
+    --color-text-primary: #1E293B;    /* main text: dark slate */
+    --color-text-secondary: #64748B;  /* labels/secondary: muted slate */
+    --color-text-muted: #94A3B8;
+    --color-border: #E2E8F0;          /* subtle light gray borders */
+    --color-card: #FFFFFF;            /* cards and surfaces: pure white */
+    --color-input-bg: #FFFFFF;
+    --color-input-border: #CBD5E1;
+    /* Soft, low-elevation card shadow (dark theme keeps none). */
+    --card-shadow: 0 1px 3px rgba(30, 41, 59, 0.05), 0 1px 2px rgba(30, 41, 59, 0.03);
   }
 
   body {
@@ -54,7 +58,7 @@
   }
 
   .btn-secondary {
-    @apply btn bg-gray-800 dark:bg-gray-700 hover:bg-gray-700 dark:hover:bg-gray-600 text-gray-100 dark:text-gray-100 border border-gray-700 dark:border-gray-600 focus:ring-gray-600;
+    @apply btn bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 focus:ring-slate-400 dark:bg-gray-800 dark:hover:bg-gray-700 dark:text-gray-100 dark:border-gray-700 dark:focus:ring-gray-600;
   }
 
   .btn-danger {
@@ -62,13 +66,14 @@
   }
 
   .btn-ghost {
-    @apply btn hover:bg-white/5 dark:hover:bg-gray-700 text-gray-300 dark:text-gray-300 hover:text-white;
+    @apply btn text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-white;
   }
 
   .card {
     @apply rounded-xl p-6 border transition-colors;
     background-color: var(--color-card);
     border-color: var(--color-border);
+    box-shadow: var(--card-shadow, none);
   }
 
   .input {
@@ -92,27 +97,27 @@
   }
 
   .badge-active {
-    @apply badge bg-green-900/50 text-green-400 border border-green-800;
+    @apply badge bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-green-900/50 dark:text-green-400 dark:border-green-800;
   }
 
   .badge-onboarding {
-    @apply badge bg-blue-900/50 text-blue-400 border border-blue-800;
+    @apply badge bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-blue-900/50 dark:text-blue-400 dark:border-blue-800;
   }
 
   .badge-inactive {
-    @apply badge bg-gray-800 dark:bg-gray-700 text-gray-400 dark:text-gray-300 border border-gray-700 dark:border-gray-600;
+    @apply badge bg-slate-100 text-slate-600 border-slate-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700;
   }
 
   .badge-pending {
-    @apply badge bg-yellow-900/50 text-yellow-400 border border-yellow-800;
+    @apply badge bg-amber-100 text-amber-700 border-amber-200 dark:bg-yellow-900/50 dark:text-yellow-400 dark:border-yellow-800;
   }
 
   .badge-in_progress {
-    @apply badge bg-blue-900/50 text-blue-400 border border-blue-800;
+    @apply badge bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-blue-900/50 dark:text-blue-400 dark:border-blue-800;
   }
 
   .badge-completed {
-    @apply badge bg-green-900/50 text-green-400 border border-green-800;
+    @apply badge bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-green-900/50 dark:text-green-400 dark:border-green-800;
   }
 
   .stat-card {
@@ -160,15 +165,15 @@
   }
 
   .table tbody tr {
-    @apply hover:bg-white/5 dark:hover:bg-gray-700/50 transition-colors;
+    @apply hover:bg-slate-50 dark:hover:bg-gray-700/50 transition-colors;
   }
 
   .form-error {
-    @apply text-red-400 text-xs mt-1;
+    @apply text-red-600 dark:text-red-400 text-xs mt-1;
   }
 
   .progress-bar {
-    @apply h-2 rounded-full bg-gray-800 dark:bg-gray-700 overflow-hidden;
+    @apply h-2 rounded-full bg-slate-200 dark:bg-gray-700 overflow-hidden;
   }
 
   .progress-fill {
@@ -181,11 +186,11 @@
   }
 
   .nav-item-active {
-    @apply nav-item bg-navy-600/20 text-navy-400 border border-navy-600/30;
+    @apply nav-item bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-navy-600/20 dark:text-navy-400 dark:border-navy-600/30;
   }
 
   .nav-item-inactive {
-    @apply nav-item text-gray-400 dark:text-gray-500 hover:text-gray-100 hover:bg-white/5 dark:hover:bg-gray-800;
+    @apply nav-item text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-gray-500 dark:hover:text-gray-100 dark:hover:bg-gray-800;
   }
 }
 
@@ -208,9 +213,12 @@
   animation: pulse-subtle 1.5s ease-in-out infinite;
 }
 
-/* Scrollbar */
+/* Scrollbar — dark thumb by default, subtle slate thumb in light mode */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #374151; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #4B5563; }
+
+.light ::-webkit-scrollbar-thumb { background: #CBD5E1; }
+.light ::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 

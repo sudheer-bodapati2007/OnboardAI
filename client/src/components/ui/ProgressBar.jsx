@@ -13,7 +13,7 @@ export function ProgressBar({ percent = 0, className = '' }) {
       : 'bg-red-500';
 
   return (
-    <div className={`h-2 rounded-full bg-gray-800 overflow-hidden ${className}`}>
+    <div className={`h-2 rounded-full bg-slate-200 dark:bg-gray-800 overflow-hidden ${className}`}>
       <div
         className={`h-full rounded-full transition-all duration-500 ${color}`}
         style={{ width: `${clamped}%` }}

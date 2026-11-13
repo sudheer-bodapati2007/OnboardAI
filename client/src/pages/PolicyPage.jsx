@@ -123,8 +123,8 @@ export default function PolicyPage() {
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-white">Policy Documents</h1>
-          <p className="text-gray-400 mt-1 text-sm">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Policy Documents</h1>
+          <p className="text-slate-500 dark:text-gray-400 mt-1 text-sm">
             Upload company PDFs — they are processed into the AI knowledge base.
           </p>
         </div>
@@ -147,10 +147,10 @@ export default function PolicyPage() {
 
       {/* Upload error banner */}
       {uploadError && (
-        <div className="mb-4 flex items-start gap-3 p-3 rounded-lg bg-red-900/20 border border-red-700/40 text-red-300">
+        <div className="mb-4 flex items-start gap-3 p-3 rounded-lg bg-red-50 border border-red-200 text-red-600 dark:bg-red-900/20 dark:border-red-700/40 dark:text-red-300">
           <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <p className="text-sm flex-1">{uploadError}</p>
-          <button onClick={() => setUploadError(null)} className="text-red-400 hover:text-red-200">
+          <button onClick={() => setUploadError(null)} className="text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-200">
             <XCircle className="w-4 h-4" />
           </button>
         </div>
@@ -173,26 +173,26 @@ export default function PolicyPage() {
           }
         />
       ) : (
-        <div className="card divide-y divide-gray-800">
+        <div className="card divide-y divide-slate-200 dark:divide-gray-800">
           {policies.map((doc) => {
             const info = STATUS_MAP[doc.status] ?? STATUS_MAP.pending;
             return (
               <div
                 key={doc._id}
-                className="flex items-center gap-4 px-5 py-4 hover:bg-white/[0.02] transition-colors"
+                className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors"
               >
-                <div className="w-10 h-10 rounded-lg bg-gray-800 flex items-center justify-center flex-shrink-0">
-                  <FileText className="w-5 h-5 text-gray-400" />
+                <div className="w-10 h-10 rounded-lg bg-slate-100 dark:bg-gray-800 flex items-center justify-center flex-shrink-0">
+                  <FileText className="w-5 h-5 text-slate-500 dark:text-gray-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-white truncate">{doc.originalName}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-sm font-medium text-slate-900 dark:text-white truncate">{doc.originalName}</p>
+                  <p className="text-xs text-slate-500 dark:text-gray-500 mt-0.5">
                     {formatDate(doc.createdAt)} · {formatBytes(doc.sizeBytes)}
                     {doc.pageCount ? ` · ${doc.pageCount} page${doc.pageCount !== 1 ? 's' : ''}` : ''}
                     {doc.chunkCount ? ` · ${doc.chunkCount} chunks` : ''}
                   </p>
                   {doc.errorMessage && (
-                    <p className="text-xs text-red-400 mt-0.5 truncate">{doc.errorMessage}</p>
+                    <p className="text-xs text-red-500 dark:text-red-400 mt-0.5 truncate">{doc.errorMessage}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -201,7 +201,7 @@ export default function PolicyPage() {
                 </div>
                 <button
                   onClick={() => setDeleteTarget(doc)}
-                  className="p-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-900/10 transition-all flex-shrink-0"
+                  className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:text-gray-600 dark:hover:text-red-400 dark:hover:bg-red-900/10 transition-all flex-shrink-0"
                   title="Delete document"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -212,7 +212,7 @@ export default function PolicyPage() {
         </div>
       )}
 
-      <p className="mt-4 text-xs text-gray-600 text-center">
+      <p className="mt-4 text-xs text-slate-400 dark:text-gray-600 text-center">
         Documents are stored locally in development. Configure{' '}
         <code className="font-mono">STORAGE_PROVIDER=gcs</code> for persistent production storage.
       </p>
@@ -223,9 +223,9 @@ export default function PolicyPage() {
         onClose={() => setDeleteTarget(null)}
         title="Delete Policy Document"
       >
-        <p className="text-sm text-gray-300 mb-6">
+        <p className="text-sm text-slate-600 dark:text-gray-300 mb-6">
           Are you sure you want to delete{' '}
-          <span className="font-semibold text-white">{deleteTarget?.originalName}</span>?{' '}
+          <span className="font-semibold text-slate-900 dark:text-white">{deleteTarget?.originalName}</span>?{' '}
           All associated AI knowledge chunks will be permanently removed.
         </p>
         <div className="flex gap-3 justify-end">

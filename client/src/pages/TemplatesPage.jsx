@@ -1,6 +1,6 @@
 // src/pages/TemplatesPage.jsx
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, ClipboardList, Edit2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, ClipboardList, Edit2, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { onboardingApi } from '../services/api.js';
 import { PageLoading } from '../components/ui/LoadingSpinner.jsx';
 import { ErrorMessage } from '../components/ui/ErrorMessage.jsx';
@@ -35,6 +35,8 @@ export default function TemplatesPage() {
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [expanded, setExpanded] = useState({});
   const [serverError, setServerError] = useState(null);
+  // Index of the task row awaiting delete confirmation (inside the modal).
+  const [pendingTaskDelete, setPendingTaskDelete] = useState(null);
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true);
@@ -65,6 +67,7 @@ export default function TemplatesPage() {
     setEditingTemplate(null);
     reset({ name: '', description: '', roleTarget: '', tasks: [] });
     setServerError(null);
+    setPendingTaskDelete(null);
     setShowModal(true);
   }
 
@@ -82,6 +85,7 @@ export default function TemplatesPage() {
       })),
     });
     setServerError(null);
+    setPendingTaskDelete(null);
     setShowModal(true);
   }
 
@@ -108,8 +112,8 @@ export default function TemplatesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Onboarding Templates</h1>
-          <p className="text-gray-400 text-sm mt-1">Reusable task sets for different roles</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Onboarding Templates</h1>
+          <p className="text-slate-500 dark:text-gray-400 text-sm mt-1">Reusable task sets for different roles</p>
         </div>
         <button onClick={openCreate} className="btn-primary">
           <Plus className="w-4 h-4" /> New Template
@@ -130,14 +134,14 @@ export default function TemplatesPage() {
       ) : (
         <div className="space-y-3">
           {templates.map((t) => (
-            <div key={t._id} className="bg-gray-900 border border-gray-800 rounded-xl overflow-hidden">
+            <div key={t._id} className="bg-white border border-slate-200 rounded-xl overflow-hidden dark:bg-gray-900 dark:border-gray-800">
               <div className="flex items-center gap-4 p-5">
-                <div className="w-10 h-10 rounded-lg bg-navy-900/60 border border-navy-800/50 flex items-center justify-center flex-shrink-0">
-                  <ClipboardList className="w-5 h-5 text-navy-400" />
+                <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-200 flex items-center justify-center flex-shrink-0 dark:bg-navy-900/60 dark:border-navy-800/50">
+                  <ClipboardList className="w-5 h-5 text-indigo-600 dark:text-navy-400" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-white">{t.name}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="font-semibold text-slate-900 dark:text-white">{t.name}</p>
+                  <p className="text-xs text-slate-500 dark:text-gray-500 mt-0.5">
                     {t.roleTarget} · {t.tasks?.length ?? 0} tasks
                     {t.description && ` · ${t.description}`}
                   </p>
@@ -156,15 +160,15 @@ export default function TemplatesPage() {
               </div>
 
               {expanded[t._id] && t.tasks?.length > 0 && (
-                <div className="border-t border-gray-800 divide-y divide-gray-800/50">
+                <div className="border-t border-slate-200 divide-y divide-slate-100 dark:border-gray-800 dark:divide-gray-800/50">
                   {t.tasks.map((task, i) => (
                     <div key={task._id ?? i} className="flex items-center gap-3 px-5 py-3">
-                      <span className="w-6 h-6 rounded-full bg-gray-800 flex items-center justify-center text-xs text-gray-400 flex-shrink-0">
+                      <span className="w-6 h-6 rounded-full bg-slate-100 dark:bg-gray-800 flex items-center justify-center text-xs text-slate-500 dark:text-gray-400 flex-shrink-0">
                         {i + 1}
                       </span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-200">{task.title}</p>
-                        <p className="text-xs text-gray-500">{task.category} · Due day +{task.dueDayOffset ?? 0}</p>
+                        <p className="text-sm text-slate-700 dark:text-gray-200">{task.title}</p>
+                        <p className="text-xs text-slate-500 dark:text-gray-500">{task.category} · Due day +{task.dueDayOffset ?? 0}</p>
                       </div>
                     </div>
                   ))}
@@ -184,7 +188,7 @@ export default function TemplatesPage() {
       >
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
           {serverError && (
-            <div className="rounded-lg bg-red-900/20 border border-red-800/50 p-3 text-sm text-red-400">
+            <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600 dark:bg-red-900/20 dark:border-red-800/50 dark:text-red-400">
               {serverError}
             </div>
           )}
@@ -208,11 +212,11 @@ export default function TemplatesPage() {
           {/* Tasks */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-medium text-gray-300">Tasks ({fields.length})</label>
+              <label className="text-sm font-medium text-slate-700 dark:text-gray-300">Tasks ({fields.length})</label>
               <button
                 type="button"
-                onClick={() => append({ title: '', description: '', category: 'General', dueDayOffset: 0 })}
-                className="text-navy-400 hover:text-navy-300 text-sm font-medium flex items-center gap-1"
+                onClick={() => { setPendingTaskDelete(null); append({ title: '', description: '', category: 'General', dueDayOffset: 0 }); }}
+                className="text-indigo-600 hover:text-indigo-700 dark:text-navy-400 dark:hover:text-navy-300 text-sm font-medium flex items-center gap-1"
               >
                 <Plus className="w-3.5 h-3.5" /> Add Task
               </button>
@@ -220,7 +224,7 @@ export default function TemplatesPage() {
 
             <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
               {fields.map((field, index) => (
-                <div key={field.id} className="bg-gray-800/50 border border-gray-700 rounded-lg p-3 space-y-2">
+                <div key={field.id} className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2 dark:bg-gray-800/50 dark:border-gray-700">
                   <div className="flex items-center gap-2">
                     <input
                       {...register(`tasks.${index}.title`)}
@@ -229,8 +233,9 @@ export default function TemplatesPage() {
                     />
                     <button
                       type="button"
-                      onClick={() => remove(index)}
-                      className="p-1.5 text-gray-500 hover:text-red-400 transition-colors"
+                      onClick={() => setPendingTaskDelete((prev) => (prev === index ? null : index))}
+                      aria-label="Remove task"
+                      className="p-1.5 text-slate-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -238,12 +243,43 @@ export default function TemplatesPage() {
                   {errors.tasks?.[index]?.title && (
                     <p className="form-error">{errors.tasks[index].title.message}</p>
                   )}
+
+                  {/* Delete confirmation — two-step, inline, before remove() fires */}
+                  {pendingTaskDelete === index && (
+                    <div className="flex items-center justify-between gap-3 rounded-lg bg-red-50 border border-red-200 px-3 py-2 dark:bg-red-900/20 dark:border-red-800/50">
+                      <span className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 min-w-0">
+                        <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                        <span className="truncate">
+                          Delete “{fields[index]?.title || 'Untitled task'}”? This cannot be undone.
+                        </span>
+                      </span>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          type="button"
+                          aria-label="Cancel delete"
+                          onClick={() => setPendingTaskDelete(null)}
+                          className="px-2 py-1 rounded-md text-xs text-slate-500 hover:text-slate-800 dark:text-gray-400 dark:hover:text-gray-100 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Confirm delete"
+                          onClick={() => { remove(index); setPendingTaskDelete(null); }}
+                          className="px-2.5 py-1 rounded-md bg-red-600 text-white text-xs font-medium hover:bg-red-500 transition-colors"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-2">
                     <select {...register(`tasks.${index}.category`)} className="input text-xs">
                       {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
                     </select>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-gray-500 whitespace-nowrap">Due day +</span>
+                      <span className="text-xs text-slate-500 dark:text-gray-500 whitespace-nowrap">Due day +</span>
                       <input
                         {...register(`tasks.${index}.dueDayOffset`)}
                         type="number" min="0"
@@ -260,14 +296,14 @@ export default function TemplatesPage() {
                 </div>
               ))}
               {fields.length === 0 && (
-                <p className="text-center text-sm text-gray-500 py-4">
+                <p className="text-center text-sm text-slate-500 dark:text-gray-500 py-4">
                   No tasks yet. Click "Add Task" to begin building this template.
                 </p>
               )}
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-2 border-t border-gray-800">
+          <div className="flex items-center justify-end gap-3 pt-2 border-t border-slate-200 dark:border-gray-800">
             <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">Cancel</button>
             <button type="submit" disabled={isSubmitting} className="btn-primary">
               {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}

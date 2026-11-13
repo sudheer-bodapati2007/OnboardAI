@@ -53,8 +53,26 @@ export async function startOnboarding(req, res, next) {
   }
 }
 
-export async function getEmployeeTasks(req, res, next) {
+// ─── Flexible task assignment ────────────────────────────────────────────────
+
+/**
+ * HR assigns an additional task to an employee at any lifecycle stage
+ * (works even when the employee's onboarding is already completed).
+ */
+export async function createTask(req, res, next) {
   try {
+    const task = await OnboardingService.createTaskForEmployee(
+      req.user.organizationId,
+      req.params.employeeId,
+      req.body
+    );
+    return success(res, { task }, 201);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export async function getEmployeeTasks(req, res, next) {  try {
     const result = await OnboardingService.getEmployeeTasks(
       req.user.organizationId,
       req.params.id

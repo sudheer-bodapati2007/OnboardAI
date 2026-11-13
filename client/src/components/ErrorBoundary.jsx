@@ -33,19 +33,19 @@ export class ErrorBoundary extends React.Component {
     if (!error) return this.props.children;
 
     return (
-      <div className="min-h-screen flex items-center justify-center p-6 bg-gray-950">
-        <div className="max-w-lg w-full p-6 rounded-xl bg-gray-900 border border-red-800/50 text-center space-y-4">
+      <div className="min-h-screen flex items-center justify-center p-6 bg-slate-50 dark:bg-gray-950">
+        <div className="max-w-lg w-full p-6 rounded-xl bg-white dark:bg-gray-900 border border-red-200 dark:border-red-800/50 text-center space-y-4">
           <div className="flex justify-center">
-            <span className="p-3 rounded-full bg-red-900/30 border border-red-800/50">
-              <AlertTriangle className="w-6 h-6 text-red-400" />
+            <span className="p-3 rounded-full bg-red-100 dark:bg-red-900/30 border border-red-200 dark:border-red-800/50">
+              <AlertTriangle className="w-6 h-6 text-red-500 dark:text-red-400" />
             </span>
           </div>
-          <h1 className="text-lg font-semibold text-white">Something went wrong</h1>
-          <p className="text-sm text-gray-400">
+          <h1 className="text-lg font-semibold text-slate-900 dark:text-white">Something went wrong</h1>
+          <p className="text-sm text-slate-600 dark:text-gray-400">
             The page hit an unexpected error while rendering. Your data is safe —
             this is a display problem only.
           </p>
-          <p className="text-xs text-gray-600 font-mono break-words">
+          <p className="text-xs text-slate-400 dark:text-gray-600 font-mono break-words">
             {String(error?.message ?? error)}
           </p>
           <div className="flex items-center justify-center gap-3 pt-2">
@@ -58,7 +58,7 @@ export class ErrorBoundary extends React.Component {
             </button>
             <button
               onClick={() => window.location.reload()}
-              className="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 underline"
+              className="px-4 py-2 text-sm text-slate-500 hover:text-slate-900 dark:text-gray-400 dark:hover:text-gray-200 underline"
             >
               Reload page
             </button>

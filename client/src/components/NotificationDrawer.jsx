@@ -6,6 +6,7 @@ import { useSocketEvent, useRealtimeReconnect } from '../contexts/RealtimeContex
 
 const TYPE_COLORS = {
   onboarding_assigned: 'bg-blue-500',
+  task_assigned:       'bg-indigo-500',
   task_completed:      'bg-green-500',
   onboarding_completed:'bg-emerald-500',
   policy_ready:        'bg-purple-500',
@@ -103,7 +104,7 @@ export function NotificationDrawer() {
       {/* Bell button */}
       <button
         onClick={() => { setOpen((o) => !o); if (!open) fetchNotifications(); }}
-        className="relative p-2 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-white/5 transition-all"
+        className="relative p-2 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-white/5 transition-all"
         aria-label="Notifications"
       >
         <Bell className="w-5 h-5" />
@@ -116,10 +117,10 @@ export function NotificationDrawer() {
 
       {/* Dropdown panel */}
       {open && (
-        <div className="absolute right-0 top-12 z-50 w-80 sm:w-96 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl overflow-hidden">
+        <div className="absolute right-0 top-12 z-50 w-80 sm:w-96 bg-white dark:bg-gray-900 border border-slate-200 dark:border-gray-700 rounded-xl shadow-2xl overflow-hidden">
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-            <h3 className="text-sm font-semibold text-white">Notifications</h3>
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-gray-800">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Notifications</h3>
             {unread > 0 && (
               <button
                 onClick={handleMarkAll}
@@ -132,36 +133,36 @@ export function NotificationDrawer() {
           </div>
 
           {/* List */}
-          <div className="max-h-96 overflow-y-auto divide-y divide-gray-800">
+          <div className="max-h-96 overflow-y-auto divide-y divide-slate-200 dark:divide-gray-800">
             {items.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-10 text-center px-4">
-                <Inbox className="w-8 h-8 text-gray-600 mb-2" />
-                <p className="text-sm text-gray-500">No notifications yet</p>
+                <Inbox className="w-8 h-8 text-slate-300 dark:text-gray-600 mb-2" />
+                <p className="text-sm text-slate-500 dark:text-gray-500">No notifications yet</p>
               </div>
             ) : (
               items.map((n) => (
                 <div
                   key={n._id}
-                  className={`flex items-start gap-3 px-4 py-3 hover:bg-white/5 transition-colors ${
-                    !n.isRead ? 'bg-navy-900/20' : ''
+                  className={`flex items-start gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors ${
+                    !n.isRead ? 'bg-indigo-50/70 dark:bg-navy-900/20' : ''
                   }`}
                 >
                   {/* Color dot */}
                   <div
                     className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
-                      TYPE_COLORS[n.type] ?? 'bg-gray-500'
+                      TYPE_COLORS[n.type] ?? 'bg-slate-400 dark:bg-gray-500'
                     }`}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-100 truncate">{n.title}</p>
-                    <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{n.body}</p>
-                    <p className="text-[10px] text-gray-600 mt-1">{timeAgo(n.createdAt)}</p>
+                    <p className="text-sm font-medium text-slate-800 dark:text-gray-100 truncate">{n.title}</p>
+                    <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5 line-clamp-2">{n.body}</p>
+                    <p className="text-[10px] text-slate-400 dark:text-gray-600 mt-1">{timeAgo(n.createdAt)}</p>
                   </div>
                   {!n.isRead && (
                     <button
                       onClick={() => handleMarkRead(n._id)}
                       title="Mark as read"
-                      className="mt-0.5 p-1 rounded text-gray-600 hover:text-green-400 transition-colors flex-shrink-0"
+                      className="mt-0.5 p-1 rounded text-slate-400 hover:text-emerald-500 dark:text-gray-600 dark:hover:text-green-400 transition-colors flex-shrink-0"
                     >
                       <Check className="w-3.5 h-3.5" />
                     </button>

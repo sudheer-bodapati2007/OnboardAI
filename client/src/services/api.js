@@ -89,6 +89,8 @@ export const employeesApi = {
   update: (id, data) => api.patch(`/employees/${id}`, data),
   updateStatus: (id, status) => api.patch(`/employees/${id}/status`, { status }),
   getTasks: (id) => api.get(`/employees/${id}/tasks`),
+  // HR assigns an additional task to an employee (any lifecycle stage).
+  createTask: (id, data) => api.post(`/employees/${id}/tasks`, data),
   startOnboarding: (id, templateId) =>
     api.post(`/employees/${id}/onboarding`, { templateId }),
   uploadProfileImage: (formData) =>

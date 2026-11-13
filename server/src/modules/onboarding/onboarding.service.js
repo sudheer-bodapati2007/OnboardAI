@@ -121,6 +121,88 @@ export async function startOnboarding(organizationId, employeeId, templateId) {
   return tasks;
 }
 
+// ─── Flexible task assignment ────────────────────────────────────────────────
+
+/**
+ * Assign a single additional task to an employee (HR only).
+ * Works at any point in the employee lifecycle — before, during or after
+ * onboarding — and never touches the employee record or their existing
+ * tasks: completed onboarding stays completed.
+ *
+ * The task is a standalone row (templateId: null) so it is independent of
+ * any template journey, but otherwise uses the exact same task structure,
+ * status model, realtime events and notification flow as template tasks.
+ */
+export async function createTaskForEmployee(organizationId, employeeId, data) {
+  // Organisation-scoped employee lookup — never trust a cross-org employeeId.
+  const employee = await Employee.findOne({ _id: employeeId, organizationId }).lean();
+  if (!employee) throw new AppError('Employee not found', 404);
+
+  // Validate the due date here (zod passes it through as a string).
+  let dueDate = null;
+  if (data.dueDate) {
+    dueDate = new Date(data.dueDate);
+    if (Number.isNaN(dueDate.getTime())) {
+      throw new AppError('Invalid due date', 422);
+    }
+  }
+
+  // Place the new task after the employee's current last task.
+  const last = await OnboardingTask.findOne({ employeeId, organizationId })
+    .sort({ order: -1 })
+    .select('order')
+    .lean();
+  const order = (last?.order ?? 0) + 1;
+
+  const task = await OnboardingTask.create({
+    organizationId,
+    employeeId,
+    templateId: null, // HR-assigned, not from a template journey
+    title: data.title,
+    description: data.description ?? '',
+    category: data.category ?? 'General',
+    dueDate,
+    order,
+    status: 'pending',
+  });
+
+  // ── Real-time events (same patterns as startOnboarding) ──
+  const payloadTask = sanitizeTask(task);
+
+  // The employee's private channel.
+  if (employee.userId) {
+    emitToUser(employee.userId, 'task:created', {
+      employeeId: String(employee._id),
+      tasks: [payloadTask],
+    });
+  }
+
+  // HR admins of the org.
+  emitToHr(organizationId, 'task:created', {
+    employeeId: String(employee._id),
+    employeeName: employee.fullName,
+    tasks: [payloadTask],
+  });
+
+  // Whole org: lean dashboard signal (metrics are live aggregates).
+  emitToOrg(organizationId, 'dashboard:update', { reason: 'task_created' });
+
+  // Notify the employee's linked user account (fire-and-forget).
+  if (employee.userId) {
+    createNotification({
+      organizationId,
+      userId: employee.userId,
+      type: 'task_assigned',
+      title: 'New task assigned',
+      body: `"${data.title}" has been assigned to you${dueDate ? ` (due ${dueDate.toISOString().slice(0, 10)})` : ''}.`,
+      relatedEmployeeId: employee._id,
+      relatedTaskId: task._id,
+    }).catch(() => {});
+  }
+
+  return task;
+}
+
 // ─── Task views ──────────────────────────────────────────────────────────────
 
 export async function getEmployeeTasks(organizationId, employeeId) {

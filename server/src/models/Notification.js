@@ -20,6 +20,7 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       enum: [
         'onboarding_assigned',
+        'task_assigned',
         'task_completed',
         'onboarding_completed',
         'policy_ready',

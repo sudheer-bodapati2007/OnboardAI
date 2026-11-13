@@ -73,7 +73,7 @@ export function AppLayout() {
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-4 py-6 border-b border-gray-800 dark:border-gray-700">
+      <div className="flex items-center gap-3 px-4 py-6 border-b border-slate-200 dark:border-gray-700">
         <div className="w-8 h-8 rounded-lg bg-navy-600 flex items-center justify-center">
           <Sparkles className="w-5 h-5 text-white" />
         </div>
@@ -92,8 +92,8 @@ export function AppLayout() {
             onClick={() => setSidebarOpen(false)}
             className={({ isActive }) =>
               isActive
-                ? 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-navy-600/20 text-navy-400 border border-navy-600/30'
-                : 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-gray-400 hover:text-gray-100 hover:bg-white/5 transition-all'
+                ? 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-navy-600/20 dark:text-navy-400 dark:border-navy-600/30'
+                : 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-white/5 transition-all'
             }
           >
             <Icon className="w-4 h-4 flex-shrink-0" />
@@ -103,8 +103,8 @@ export function AppLayout() {
       </nav>
 
       {/* User profile */}
-      <div className="px-3 pb-4 border-t border-gray-800 dark:border-gray-600 pt-3">
-        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-gray-800/50 dark:bg-gray-800/30 mb-2">
+      <div className="px-3 pb-4 border-t border-slate-200 dark:border-gray-600 pt-3">
+        <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-slate-100 dark:bg-gray-800/30 mb-2">
           <div className="relative">
             {user?.picture ? (
               <img src={user.picture} alt={user.name} className="w-8 h-8 rounded-full" />
@@ -133,7 +133,7 @@ export function AppLayout() {
           </div>
         </div>
         {imageError && (
-          <p className="text-xs text-red-400 px-3 mb-2">{imageError}</p>
+          <p className="text-xs text-red-500 dark:text-red-400 px-3 mb-2">{imageError}</p>
         )}
         <button
           onClick={handleLogout}
@@ -157,9 +157,9 @@ export function AppLayout() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-midnight-950">
+    <div className="flex h-screen overflow-hidden bg-slate-50 dark:bg-midnight-950">
       {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-64 flex-shrink-0 flex-col bg-gray-900 dark:bg-gray-900 border-r border-gray-800 dark:border-gray-700">
+      <aside className="hidden lg:flex w-64 flex-shrink-0 flex-col bg-white dark:bg-gray-900 border-r border-slate-200 dark:border-gray-700">
         <SidebarContent />
       </aside>
 
@@ -167,7 +167,7 @@ export function AppLayout() {
       {sidebarOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/60" onClick={() => setSidebarOpen(false)} />
-          <aside className="absolute left-0 top-0 bottom-0 w-72 bg-gray-900 dark:bg-gray-900 border-r border-gray-800 dark:border-gray-700 z-10">
+          <aside className="absolute left-0 top-0 bottom-0 w-72 bg-white dark:bg-gray-900 border-r border-slate-200 dark:border-gray-700 z-10">
             <SidebarContent />
           </aside>
         </div>
@@ -176,11 +176,11 @@ export function AppLayout() {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white dark:bg-gray-900">
         {/* Top bar — visible on all sizes; mobile gets hamburger, desktop gets notification bell */}
-        <header className="flex items-center gap-3 px-4 py-3 bg-gray-900 dark:bg-gray-900 border-b border-gray-800 dark:border-gray-700">
+        <header className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-gray-900 border-b border-slate-200 dark:border-gray-700">
           {/* Hamburger — mobile only */}
           <button
             onClick={() => setSidebarOpen(true)}
-            className="lg:hidden p-2 rounded-lg hover:bg-gray-800 text-gray-400"
+            className="lg:hidden p-2 rounded-lg hover:bg-slate-100 text-slate-600 dark:hover:bg-gray-800 dark:text-gray-400"
           >
             <Menu className="w-5 h-5" />
           </button>
